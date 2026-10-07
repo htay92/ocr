@@ -2,7 +2,11 @@
 
 use App\Jobs\ProcessDocumentJob;
 use App\Models\Document;
+use App\Models\OcrRun;
+use App\Models\Receipt;
+use App\Models\ReceiptTax;
 use App\Models\User;
+use App\Models\ValidationResult;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -168,4 +172,37 @@ it('shows extracted fields, tax rows, line items and checks', function () {
         ->assertSee('商品A');
 
     $this->get('/documents')->assertSee(['株式会社○○', 'Invoice', '¥1,001,404']);
+});
+
+it('deletes a document with its file, runs, fields and checks', function () {
+    Storage::disk('local')->put('documents/a.png', 'PNG');
+    $document = Document::factory()->for($this->user)->status('needs_review')->create(['file_path' => 'documents/a.png']);
+    $run = $document->ocrRuns()->create(['engine' => 'paddle', 'lines' => []]);
+    $document->receipt()->create(['total' => 1280])->taxes()->create(['tax_rate' => 10, 'taxable_amount' => 1280, 'tax_amount' => 116]);
+    $run->validationResults()->create(['document_id' => $document->id, 'rule_code' => 'V-01', 'level' => 'pass', 'message' => 'ok']);
+
+    $this->get("/documents/{$document->id}")->assertSee('Delete');
+    $this->delete("/documents/{$document->id}")
+        ->assertRedirect('/documents')
+        ->assertSessionHas('status', 'Document deleted.');
+
+    expect(Document::count())->toBe(0)
+        ->and(OcrRun::count())->toBe(0)
+        ->and(Receipt::count())->toBe(0)
+        ->and(ReceiptTax::count())->toBe(0)
+        ->and(ValidationResult::count())->toBe(0);
+    Storage::disk('local')->assertMissing('documents/a.png');
+});
+
+it('does not delete a document while it is processing, or someone else\'s', function () {
+    $busy = Document::factory()->for($this->user)->status('processing')->create();
+    $other = Document::factory()->status('extracted')->create();
+
+    $this->get("/documents/{$busy->id}")->assertDontSee('Delete this document');
+    $this->from("/documents/{$busy->id}")->delete("/documents/{$busy->id}")
+        ->assertRedirect("/documents/{$busy->id}")
+        ->assertSessionHasErrors('delete');
+    $this->delete("/documents/{$other->id}")->assertNotFound();
+
+    expect(Document::count())->toBe(2);
 });

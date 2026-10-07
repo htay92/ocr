@@ -14,4 +14,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('documents/{document}/runs', [DocumentController::class, 'runs']);
     Route::get('documents/{document}/file', [DocumentController::class, 'file']);
     Route::post('documents/{document}/rerun', [DocumentController::class, 'rerun']);
+    Route::delete('documents/{document}', [DocumentController::class, 'destroy']);
 });

@@ -30,6 +30,9 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
     // Engine retries happen inside HttpOcrEngine; a retried job would run every engine again.
     public int $tries = 1;
 
+    // A queued document that was deleted before its job started: drop the job.
+    public bool $deleteWhenMissingModels = true;
+
     // Must stay below REDIS_QUEUE_RETRY_AFTER (960 s); see config/ocr.php.
     public int $timeout = 900;
 

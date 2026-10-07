@@ -131,4 +131,17 @@ class DocumentController extends Controller
 
         return redirect()->route('documents.show', $document)->with('status', __('Re-run queued.'));
     }
+
+    public function destroy(Document $document): RedirectResponse
+    {
+        Gate::authorize('delete', $document);
+
+        if (! $document->canBeDeleted()) {
+            return back()->withErrors(['delete' => __('This document is being processed. Delete it when processing has finished.')]);
+        }
+
+        $document->deleteWithFile();
+
+        return redirect()->route('documents.index')->with('status', __('Document deleted.'));
+    }
 }

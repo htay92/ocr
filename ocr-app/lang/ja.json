@@ -150,5 +150,9 @@
     "No duplicate": "重複なし",
     "Same vendor, date and total as document #:id": "書類 #:id と発行元・日付・合計金額が同じです",
     "file": "ファイル",
-    "Your session expired. Please log in again.": "セッションの有効期限が切れました。もう一度ログインしてください。"
+    "Your session expired. Please log in again.": "セッションの有効期限が切れました。もう一度ログインしてください。",
+    "Delete this document": "この書類を削除",
+    "Delete this document? The file and its results are removed and cannot be restored.": "この書類を削除しますか？ファイルと読み取り結果が削除され、元に戻せません。",
+    "Document deleted.": "書類を削除しました。",
+    "This document is being processed. Delete it when processing has finished.": "この書類は処理中です。処理が終わってから削除してください。"
 }

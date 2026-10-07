@@ -20,4 +20,9 @@ class DocumentPolicy
     {
         return $this->view($user, $document);
     }
+
+    public function delete(User $user, Document $document): Response
+    {
+        return $this->view($user, $document);
+    }
 }

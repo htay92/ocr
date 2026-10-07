@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
 use LogicException;
 
 /**
@@ -71,6 +72,26 @@ class Document extends Model
         return [
             'confirmed_at' => 'datetime',
         ];
+    }
+
+    /** A running job is still writing to it. */
+    public function canBeDeleted(): bool
+    {
+        return $this->status !== self::PROCESSING;
+    }
+
+    /**
+     * Delete the document with its stored file; OCR runs, fields, line items
+     * and checks go with it (foreign keys cascade).
+     */
+    public function deleteWithFile(): void
+    {
+        if (! $this->canBeDeleted()) {
+            throw new LogicException("Document {$this->id} is being processed and cannot be deleted.");
+        }
+
+        $this->delete();
+        Storage::disk('local')->delete($this->file_path);
     }
 
     /** Still queued or running; the screens refresh until this is false. */

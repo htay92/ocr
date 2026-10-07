@@ -13,6 +13,7 @@ use App\Services\DocumentUploader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -101,5 +102,21 @@ class DocumentController extends Controller
         ProcessDocumentJob::dispatch($document, $data['engine'] ?? null);
 
         return (new DocumentResource($document))->response()->setStatusCode(202);
+    }
+
+    /**
+     * Delete a document with its file and results. Not while it is being processed.
+     */
+    public function destroy(Document $document): JsonResponse|Response
+    {
+        Gate::authorize('delete', $document);
+
+        if (! $document->canBeDeleted()) {
+            return response()->json(['message' => 'The document is being processed; delete it when processing has finished.'], 409);
+        }
+
+        $document->deleteWithFile();
+
+        return response()->noContent();
     }
 }

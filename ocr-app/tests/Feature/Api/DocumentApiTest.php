@@ -129,3 +129,16 @@ it('lists engines with their health', function () {
         ->assertJsonPath('data.1.enabled', false)
         ->assertJsonPath('fallback', ['paddle']);
 });
+
+it('deletes a document through the API', function () {
+    Sanctum::actingAs($this->user);
+    Storage::disk('local')->put('documents/a.png', 'PNG');
+    $document = Document::factory()->for($this->user)->status('failed')->create(['file_path' => 'documents/a.png']);
+    $busy = Document::factory()->for($this->user)->status('processing')->create();
+
+    $this->deleteJson("/api/documents/{$document->id}")->assertNoContent();
+    $this->deleteJson("/api/documents/{$busy->id}")->assertStatus(409);
+
+    expect(Document::pluck('id')->all())->toBe([$busy->id]);
+    Storage::disk('local')->assertMissing('documents/a.png');
+});

@@ -29,4 +29,5 @@ Route::middleware('auth')->group(function () {
     Route::get('documents/{document}', [DocumentController::class, 'show'])->name('documents.show');
     Route::get('documents/{document}/file', [DocumentController::class, 'file'])->name('documents.file');
     Route::post('documents/{document}/rerun', [DocumentController::class, 'rerun'])->name('documents.rerun');
+    Route::delete('documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
 });

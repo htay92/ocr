@@ -16,6 +16,7 @@
         <div class="flash error" role="alert">{{ $document->error_message }}</div>
     @endif
     @error('rerun') <div class="flash error" role="alert">{{ $message }}</div> @enderror
+    @error('delete') <div class="flash error" role="alert">{{ $message }}</div> @enderror
 
     <div class="detail">
         <div class="preview">
@@ -102,5 +103,14 @@
                 </tbody>
             </table>
         </div>
+    @endif
+
+    @if ($document->canBeDeleted())
+        <form method="POST" action="{{ route('documents.destroy', $document) }}" class="danger-zone"
+              onsubmit="return confirm(@js(__('Delete this document? The file and its results are removed and cannot be restored.')))">
+            @csrf
+            @method('DELETE')
+            <button class="button danger" type="submit">{{ __('Delete this document') }}</button>
+        </form>
     @endif
 @endsection
