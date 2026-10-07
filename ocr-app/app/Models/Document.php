@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 /**
@@ -113,6 +114,35 @@ class Document extends Model
     public function ocrRuns(): HasMany
     {
         return $this->hasMany(OcrRun::class);
+    }
+
+    /**
+     * @return HasOne<Receipt, $this>
+     */
+    public function receipt(): HasOne
+    {
+        return $this->hasOne(Receipt::class);
+    }
+
+    /**
+     * Validation results of every run.
+     *
+     * @return HasMany<ValidationResult, $this>
+     */
+    public function validationResults(): HasMany
+    {
+        return $this->hasMany(ValidationResult::class);
+    }
+
+    /**
+     * Validation results of the selected run. Query it directly; it cannot be
+     * eager-loaded, because it depends on this document's selected_run_id.
+     *
+     * @return HasMany<ValidationResult, $this>
+     */
+    public function checks(): HasMany
+    {
+        return $this->validationResults()->where('ocr_run_id', $this->selected_run_id)->orderBy('rule_code');
     }
 
     /**

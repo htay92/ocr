@@ -99,7 +99,7 @@ it('streams the original file inline to its owner only', function () {
 });
 
 it('re-runs a failed document from its page', function () {
-    Http::fake(['ocr-paddle:8000/ocr' => Http::response(ocrResponse())]);
+    Http::fake(['ocr-paddle:8000/ocr' => Http::response(ocrResponse(validReceiptLines()))]);
     Storage::disk('local')->put('documents/a.png', file_get_contents(tempImage()));
     $document = Document::factory()->for($this->user)->status('failed')
         ->create(['file_path' => 'documents/a.png', 'error_message' => 'E-OCR-01: paddle: down']);
@@ -110,4 +110,34 @@ it('re-runs a failed document from its page', function () {
         ->assertRedirect("/documents/{$document->id}");
 
     expect($document->fresh()->status)->toBe('extracted');
+});
+
+it('shows extracted fields, tax rows, line items and checks', function () {
+    $document = Document::factory()->for($this->user)->status('needs_review')->create(['type' => 'invoice']);
+    $run = $document->ocrRuns()->create(['engine' => 'paddle', 'lines' => [], 'avg_confidence' => 0.9]);
+    $document->update(['selected_run_id' => $run->id]);
+    $receipt = $document->receipt()->create([
+        'vendor_name' => '株式会社○○', 'total' => 1001404, 'subtotal' => 1004000, 'withholding_tax' => 102916,
+        'tax_mode' => 'exclusive', 'registration_number' => 'T1234567890123',
+    ]);
+    $receipt->taxes()->createMany([
+        ['tax_rate' => 10, 'taxable_amount' => 1000000, 'tax_amount' => 100000],
+        ['tax_rate' => 8, 'taxable_amount' => 4000, 'tax_amount' => 320],
+    ]);
+    $receipt->lines()->create(['line_no' => 1, 'name' => '商品A', 'quantity' => 1, 'unit_price' => 1000000, 'amount' => 1000000, 'tax_rate' => 10]);
+    $run->validationResults()->createMany([
+        ['document_id' => $document->id, 'rule_code' => 'V-05', 'level' => 'pass', 'message' => 'tax adds up'],
+        ['document_id' => $document->id, 'rule_code' => 'V-02', 'level' => 'critical', 'message' => 'Issue date not found'],
+    ]);
+
+    $this->get("/documents/{$document->id}")
+        ->assertOk()
+        ->assertSee('請求書 (invoice)')
+        ->assertSeeInOrder(['V-02', 'Issue date not found', 'V-05'])   // critical first
+        ->assertSee(['株式会社○○', '¥1,001,404', '¥102,916', '外税 (tax excluded)', 'T1234567890123'])
+        ->assertSee('missing')                                            // invoice number and date are required on invoices
+        ->assertSeeInOrder(['10%', '¥1,000,000', '¥100,000', '8% (軽減)', '¥4,000', '¥320'])
+        ->assertSee('商品A');
+
+    $this->get('/documents')->assertSee(['株式会社○○', '請求書', '¥1,001,404']);
 });

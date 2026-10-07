@@ -7,6 +7,8 @@ use App\Models\OcrRun;
 use App\Ocr\Data\OcrResult;
 use App\Ocr\OcrException;
 use App\Ocr\OcrManager;
+use App\Processing\Analysis;
+use App\Processing\DocumentAnalyzer;
 use App\Processing\InputRouter;
 use App\Processing\PdfRasterizer;
 use App\Processing\PdfTextExtractor;
@@ -18,7 +20,8 @@ use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
- * Processes one uploaded document (spec 2.4, 3.1): route, OCR with fallback, save.
+ * Processes one uploaded document (spec 2.4, 3.1): route, OCR, classify,
+ * extract and validate, falling back to the next engine on critical failures (FR-09).
  */
 class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
 {
@@ -38,13 +41,16 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
         public ?string $engine = null,
     ) {}
 
+    private DocumentAnalyzer $analyzer;
+
     public function uniqueId(): string
     {
         return (string) $this->document->id;
     }
 
-    public function handle(OcrManager $ocr, InputRouter $router, PdfTextExtractor $pdfText, PdfRasterizer $rasterizer): void
+    public function handle(OcrManager $ocr, InputRouter $router, PdfTextExtractor $pdfText, PdfRasterizer $rasterizer, DocumentAnalyzer $analyzer): void
     {
+        $this->analyzer = $analyzer;
         $document = $this->document;
         $document->transitionTo(Document::PROCESSING, ['error_message' => null]);
         $path = Storage::disk('local')->path($document->file_path);
@@ -96,7 +102,11 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
             'elapsed_ms' => intdiv(hrtime(true) - $started, 1_000_000),
         ]);
 
-        $this->select($document, $run);
+        // The text layer is exact, so there is no other engine to fall back to.
+        $analysis = $this->analyzer->analyse($document, $run);
+        $analysis->criticalFailures() === 0
+            ? $this->analyzer->apply($document, $analysis, Document::EXTRACTED)
+            : $this->needsReview($document, $analysis);
     }
 
     private function runOcr(Document $document, string $path, OcrManager $ocr, PdfRasterizer $rasterizer): void
@@ -105,6 +115,7 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
 
         try {
             $lastError = null;
+            $candidates = [];
 
             foreach ($this->engine ? [$this->engine] : $ocr->fallbackOrder() as $name) {
                 try {
@@ -121,11 +132,21 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
                 }
 
                 $run = $document->ocrRuns()->create($this->runAttributes($name, $results));
+                $analysis = $this->analyzer->analyse($document, $run);
 
-                // Milestone 4: classify, extract and validate here; on critical failures
-                // continue with the next engine instead of selecting this run (FR-09).
+                if ($analysis->criticalFailures() === 0) {
+                    $this->analyzer->apply($document, $analysis, Document::EXTRACTED);
 
-                $this->select($document, $run);
+                    return;
+                }
+
+                $candidates[] = $analysis; // critical failures: try the next engine (FR-09)
+            }
+
+            if ($candidates !== []) {
+                // Every engine failed a critical check: keep the run with the fewest failures.
+                usort($candidates, fn (Analysis $a, Analysis $b) => $a->criticalFailures() <=> $b->criticalFailures());
+                $this->needsReview($document, $candidates[0]);
 
                 return;
             }
@@ -164,8 +185,13 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
         ];
     }
 
-    private function select(Document $document, OcrRun $run): void
+    /**
+     * Spec 2.4: critical checks failed on every engine; the user corrects manually.
+     */
+    private function needsReview(Document $document, Analysis $analysis): void
     {
-        $document->transitionTo(Document::EXTRACTED, ['selected_run_id' => $run->id]);
+        $this->analyzer->apply($document, $analysis, Document::NEEDS_REVIEW, [
+            'error_message' => 'E-OCR-02: critical checks failed ('.implode(', ', $analysis->criticalCodes())."); best result from {$analysis->run->engine}",
+        ]);
     }
 }

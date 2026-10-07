@@ -16,6 +16,15 @@
                 @endforeach
             </select>
         </div>
+        <div>
+            <label for="type">Type</label>
+            <select id="type" name="type">
+                <option value="">All</option>
+                @foreach ($types as $type => $name)
+                    <option value="{{ $type }}" @selected(($filters['type'] ?? null) === $type)>{{ $name }}</option>
+                @endforeach
+            </select>
+        </div>
         <button class="button secondary" type="submit">Filter</button>
     </form>
 
@@ -33,10 +42,19 @@
             @foreach ($documents as $document)
                 <li class="card" style="padding:0">
                     <a class="doc" href="{{ route('documents.show', $document) }}">
-                        <span class="name">{{ $document->original_name }}</span>
+                        <span class="name">
+                            @if ($document->receipt?->vendor_name) {{ $document->receipt->vendor_name }} @else {{ $document->original_name }} @endif
+                        </span>
                         <x-status :status="$document->status" />
+                        @if ($document->type || $document->receipt)
+                            <span class="summary">
+                                @if ($document->type) <span class="type">{{ $types[$document->type] ?? $document->type }}</span> @endif
+                                @if ($document->receipt?->issue_date) {{ $document->receipt->issue_date->format('Y-m-d') }} @endif
+                                @if ($document->receipt?->total !== null) <strong>¥{{ number_format($document->receipt->total) }}</strong> @endif
+                            </span>
+                        @endif
                         <span class="meta">
-                            #{{ $document->id }} · {{ $document->created_at->format('Y-m-d H:i') }}
+                            #{{ $document->id }} · {{ $document->original_name }} · {{ $document->created_at->format('Y-m-d H:i') }}
                             @if ($document->route) · {{ str_replace('_', ' ', $document->route) }} @endif
                             @if ($document->selectedRun) · {{ $document->selectedRun->engine }}, {{ count($document->selectedRun->lines ?? []) }} lines @endif
                             @if ($document->error_message) · <span style="color:var(--danger)">{{ \Illuminate\Support\Str::limit($document->error_message, 80) }}</span> @endif

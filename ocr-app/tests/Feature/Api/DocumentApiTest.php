@@ -95,7 +95,7 @@ it('lists documents filtered by status', function () {
 
 it('re-runs a failed document with a chosen engine', function () {
     Sanctum::actingAs($this->user);
-    Http::fake(['ocr-paddle:8000/ocr' => Http::response(ocrResponse())]);
+    Http::fake(['ocr-paddle:8000/ocr' => Http::response(ocrResponse(validReceiptLines()))]);
     Storage::disk('local')->put('documents/a.png', file_get_contents(tempImage()));
     $document = Document::factory()->for($this->user)->status('failed')
         ->create(['file_path' => 'documents/a.png', 'error_message' => 'E-OCR-01: paddle: down']);

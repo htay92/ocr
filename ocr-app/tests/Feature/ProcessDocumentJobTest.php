@@ -20,8 +20,8 @@ function storedDocument(string $source, string $mime = 'image/png', string $exte
     return Document::factory()->create(['file_path' => $path, 'mime_type' => $mime, 'original_name' => "test.{$extension}"]);
 }
 
-it('runs OCR, saves the run and marks the document extracted', function () {
-    Http::fake(['ocr-paddle:8000/ocr' => Http::response(ocrResponse())]);
+it('runs OCR, extracts the receipt and marks the document extracted', function () {
+    Http::fake(['ocr-paddle:8000/ocr' => Http::response(ocrResponse(validReceiptLines()))]);
     $document = storedDocument(tempImage());
 
     ProcessDocumentJob::dispatchSync($document);
@@ -30,19 +30,70 @@ it('runs OCR, saves the run and marks the document extracted', function () {
     $run = $document->selectedRun;
     expect($document->status)->toBe('extracted')
         ->and($document->route)->toBe('ocr')
+        ->and($document->type)->toBe('receipt')
         ->and($run->engine)->toBe('paddle')
         ->and($run->engine_version)->toBe('3.7.0 / PP-OCRv5')
         ->and($run->elapsed_ms)->toBe(2340)
         ->and((float) $run->avg_confidence)->toBe(0.97)
-        ->and($run->text())->toBe("ローソン\n合計 ¥1,280")
-        ->and($run->lines[1])->toMatchArray(['text' => '合計 ¥1,280', 'page' => 1]);
+        ->and($run->critical_failures)->toBe(0)
+        ->and($run->lines[2])->toMatchArray(['text' => '合計 ¥1,280', 'page' => 1])
+        ->and($document->receipt->only(['vendor_name', 'total']))->toBe(['vendor_name' => 'ローソン', 'total' => 1280])
+        ->and($document->receipt->issue_date->format('Y-m-d'))->toBe('2026-10-01')
+        ->and($document->checks()->pluck('level', 'rule_code')->all())
+        ->toMatchArray(['V-01' => 'pass', 'V-02' => 'pass', 'V-09' => 'pass', 'V-10' => 'pass']);
+});
+
+it('falls back to the next engine when the first one fails a critical check (FR-09)', function () {
+    config(['ocr.engines.ndl.enabled' => true]);
+    Http::fake([
+        'ocr-paddle:8000/*' => Http::response(ocrResponse([['ローソン', 0.6], ['合計 ¥1,28O', 0.5]])), // no date: V-02
+        'ocr-ndl:8000/*' => Http::response(ocrResponse(validReceiptLines(), ['engine' => 'ndl'])),
+    ]);
+    $document = storedDocument(tempImage());
+
+    ProcessDocumentJob::dispatchSync($document);
+
+    $document->refresh();
+    expect($document->status)->toBe('extracted')
+        ->and($document->selectedRun->engine)->toBe('ndl')
+        ->and($document->ocrRuns()->pluck('critical_failures', 'engine')->all())->toBe(['paddle' => 1, 'ndl' => 0]);
+});
+
+it('needs review when every engine fails a critical check, keeping the best run', function () {
+    config(['ocr.engines.ndl.enabled' => true]);
+    Http::fake([
+        'ocr-paddle:8000/*' => Http::response(ocrResponse([['ローソン', 0.9], ['小計 ¥500', 0.9]])),               // V-01 and V-02
+        'ocr-ndl:8000/*' => Http::response(ocrResponse([['ローソン', 0.9], ['合計 ¥1,280', 0.9]], ['engine' => 'ndl'])), // V-02 only
+    ]);
+    $document = storedDocument(tempImage());
+
+    ProcessDocumentJob::dispatchSync($document);
+
+    $document->refresh();
+    expect($document->status)->toBe('needs_review')
+        ->and($document->error_message)->toBe('E-OCR-02: critical checks failed (V-02); best result from ndl')
+        ->and($document->selectedRun->engine)->toBe('ndl')
+        ->and($document->receipt->total)->toBe(1280)
+        ->and($document->checks()->firstWhere('rule_code', 'V-02')->level)->toBe('critical');
+});
+
+it('only classifies attendance sheets; the importer reads them later', function () {
+    Http::fake(['*' => Http::response(ocrResponse([['【勤務データ】山田_2026年10月1日~2026年10月31日', 0.9], ['所定時間 労働時間', 0.9]]))]);
+    $document = storedDocument(tempImage());
+
+    ProcessDocumentJob::dispatchSync($document);
+
+    expect($document->fresh())
+        ->status->toBe('extracted')
+        ->type->toBe('attendance')
+        ->and($document->receipt()->exists())->toBeFalse();
 });
 
 it('falls back to the next engine when the first one is down', function () {
     config(['ocr.engines.ndl.enabled' => true, 'ocr.retries' => 0]);
     Http::fake([
         'ocr-paddle:8000/*' => Http::failedConnection(),
-        'ocr-ndl:8000/*' => Http::response(ocrResponse(overrides: ['engine' => 'ndl'])),
+        'ocr-ndl:8000/*' => Http::response(ocrResponse(validReceiptLines(), ['engine' => 'ndl'])),
     ]);
     $document = storedDocument(tempImage());
 

@@ -24,6 +24,11 @@ return [
     'retries' => (int) env('OCR_RETRIES', 3),
     'backoff' => [10, 30, 90],
 
+    // Field extraction (spec 3.6 "extraction.driver"): rule, or llm (FR-17, not implemented yet).
+    'extraction' => [
+        'driver' => env('EXTRACTOR', 'rule'),
+    ],
+
     // V-09: lines below this average confidence are flagged (spec 3.5, 3.6).
     'confidence_min' => (float) env('OCR_CONFIDENCE_MIN', 0.80),
 

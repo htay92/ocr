@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One engine run on a document (spec 3.3). Failed runs are kept too, with error_code.
@@ -44,5 +45,13 @@ class OcrRun extends Model
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);
+    }
+
+    /**
+     * @return HasMany<ValidationResult, $this>
+     */
+    public function validationResults(): HasMany
+    {
+        return $this->hasMany(ValidationResult::class);
     }
 }

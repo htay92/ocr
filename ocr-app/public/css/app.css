@@ -114,3 +114,18 @@ th { color: var(--muted); font-weight: 600; }
 
 /* Login */
 .auth { max-width: 380px; margin: 12vh auto 0; }
+
+/* Extraction results (milestone 4) */
+.badge.pass { background: var(--ok-bg); color: var(--ok); }
+.badge.warning { background: var(--warn-bg); color: var(--warn); }
+.badge.critical { background: var(--danger-bg); color: var(--danger); }
+.checks { list-style: none; margin: 0; padding: 6px; }
+.checks li { display: grid; grid-template-columns: 5.5em 3.2em 1fr; gap: 10px; align-items: baseline; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.checks li:last-child { border-bottom: 0; }
+.checks .badge { text-align: center; }
+.checks .code { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.checks .text { overflow-wrap: anywhere; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.wrap { white-space: normal; overflow-wrap: anywhere; min-width: 8em; }
+.doc .summary { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.doc .type { font-size: .8rem; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }

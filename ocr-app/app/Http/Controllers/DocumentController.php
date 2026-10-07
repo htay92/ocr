@@ -26,15 +26,24 @@ class DocumentController extends Controller
         Document::NEEDS_REVIEW, Document::CONFIRMED, Document::FAILED,
     ];
 
+    /** Document types (FR-06) with their Japanese names. */
+    public const TYPES = [
+        'receipt' => 'レシート',
+        'invoice' => '請求書',
+        'paid_receipt' => '領収証',
+        'attendance' => '勤怠',
+        'other' => 'その他',
+    ];
+
     public function index(Request $request): View
     {
         $filters = $request->validate([
             'status' => ['nullable', Rule::in(self::STATUSES)],
-            'type' => ['nullable', 'string', 'max:20'],
+            'type' => ['nullable', Rule::in(array_keys(self::TYPES))],
         ]);
 
         $documents = $request->user()->documents()
-            ->with('selectedRun')
+            ->with(['selectedRun', 'receipt'])
             ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->when($filters['type'] ?? null, fn ($query, $type) => $query->where('type', $type))
             ->latest('id')
@@ -45,6 +54,7 @@ class DocumentController extends Controller
             'documents' => $documents,
             'filters' => $filters,
             'statuses' => self::STATUSES,
+            'types' => self::TYPES,
             'busy' => $documents->contains(fn (Document $document) => $document->isBusy()),
         ]);
     }
@@ -72,10 +82,12 @@ class DocumentController extends Controller
         Gate::authorize('view', $document);
 
         return view('documents.show', [
-            'document' => $document->load('selectedRun'),
+            'document' => $document->load(['selectedRun', 'receipt.taxes', 'receipt.lines']),
+            'checks' => $document->checks()->get(),
             'runs' => $document->ocrRuns()->latest('id')->get(),
             'engines' => $ocr->enabledEngines(),
             'lowConfidence' => (float) config('ocr.confidence_min'),
+            'types' => self::TYPES,
         ]);
     }
 

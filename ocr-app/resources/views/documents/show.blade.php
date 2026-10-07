@@ -31,7 +31,7 @@
             <div class="card">
                 <dl class="facts">
                     <dt>Status</dt><dd>{{ str_replace('_', ' ', $document->status) }}</dd>
-                    <dt>Type</dt><dd>{{ $document->type ?? '—' }} <span class="muted small">(detected in milestone 4)</span></dd>
+                    <dt>Type</dt><dd>{{ $document->type ? ($types[$document->type] ?? $document->type).' ('.str_replace('_', ' ', $document->type).')' : '—' }}</dd>
                     <dt>Read by</dt><dd>{{ $document->route ? str_replace('_', ' ', $document->route) : '—' }}</dd>
                     @if ($run = $document->selectedRun)
                         <dt>Engine</dt><dd>{{ $run->engine }} {{ $run->engine_version }}</dd>
@@ -58,6 +58,12 @@
                 </form>
             @endif
 
+            @include('documents._validation')
+
+            @if ($receipt = $document->receipt)
+                @include('documents._receipt')
+            @endif
+
             @if ($run = $document->selectedRun)
                 <h2>Text ({{ count($run->lines ?? []) }} lines)</h2>
                 <p class="muted small">Lines below {{ number_format($lowConfidence, 2) }} confidence are highlighted.</p>
@@ -78,13 +84,14 @@
         <h2>OCR runs</h2>
         <div class="card table-wrap">
             <table>
-                <thead><tr><th>#</th><th>Engine</th><th>Result</th><th>Lines</th><th>Confidence</th><th>Time</th><th>When</th></tr></thead>
+                <thead><tr><th>#</th><th>Engine</th><th>Result</th><th>Critical</th><th>Lines</th><th>Confidence</th><th>Time</th><th>When</th></tr></thead>
                 <tbody>
                 @foreach ($runs as $item)
                     <tr>
                         <td>{{ $item->id }}{{ $item->id === $document->selected_run_id ? ' ✓' : '' }}</td>
                         <td>{{ $item->engine }}</td>
                         <td>{{ $item->error_code ?? 'ok' }}</td>
+                        <td>{{ $item->error_code ? '—' : $item->critical_failures }}</td>
                         <td>{{ count($item->lines ?? []) }}</td>
                         <td>{{ $item->avg_confidence === null ? '—' : number_format((float) $item->avg_confidence, 3) }}</td>
                         <td>{{ $item->elapsed_ms === null ? '—' : number_format($item->elapsed_ms / 1000, 1).' s' }}</td>

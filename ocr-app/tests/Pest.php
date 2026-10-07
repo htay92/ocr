@@ -86,3 +86,13 @@ function hasPoppler(): bool
 {
     return trim((string) shell_exec('command -v pdftotext')) !== '' && trim((string) shell_exec('command -v pdftoppm')) !== '';
 }
+
+/**
+ * OCR lines of a receipt that passes every critical check (V-01 total, V-02 date).
+ *
+ * @return list<array{0: string, 1: float}>
+ */
+function validReceiptLines(): array
+{
+    return [['ローソン', 0.98], ['2026年10月1日 12:00', 0.97], ['合計 ¥1,280', 0.96]];
+}

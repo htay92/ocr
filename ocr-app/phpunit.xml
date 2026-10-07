@@ -40,5 +40,7 @@
         <env name="OCR_CLOUD_ENABLED" value="false" force="true"/>
         <env name="OCR_TIMEOUT" value="60" force="true"/>
         <env name="OCR_RETRIES" value="3" force="true"/>
+        <env name="EXTRACTOR" value="rule" force="true"/>
+        <env name="OCR_CONFIDENCE_MIN" value="0.80" force="true"/>
     </php>
 </phpunit>
