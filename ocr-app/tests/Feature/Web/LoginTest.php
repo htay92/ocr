@@ -26,3 +26,15 @@ it('rejects a wrong password', function () {
         ->assertSessionHasErrors(['email' => 'The email or password is incorrect.']);
     $this->assertGuest();
 });
+
+it('builds https links behind a forwarding proxy (VS Code port forwarding, tunnels)', function () {
+    $response = $this->get('/login', [
+        'X-Forwarded-Proto' => 'https',
+        'X-Forwarded-Host' => 'abc123-8080.asse.devtunnels.ms',
+        'X-Forwarded-Port' => '443',
+    ]);
+
+    $response->assertOk()
+        ->assertSee('href="https://abc123-8080.asse.devtunnels.ms/css/app.css"', false)
+        ->assertSee('action="https://abc123-8080.asse.devtunnels.ms/login"', false);
+});
