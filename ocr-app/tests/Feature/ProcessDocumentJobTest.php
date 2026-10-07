@@ -186,3 +186,19 @@ it('marks the document failed when the job itself crashes', function () {
         ->status->toBe('failed')
         ->error_message->toBe('Worker timed out');
 });
+
+it('keeps the preprocessed page, what the run extracted and where each field was read', function () {
+    $jpeg = base64_encode(file_get_contents(tempImage(120, 80)));
+    Http::fake(['*' => Http::response(ocrResponse(validReceiptLines(), ['preprocessed_image' => $jpeg]))]);
+    $document = storedDocument(tempImage());
+
+    ProcessDocumentJob::dispatchSync($document);
+
+    $document->refresh();
+    $run = $document->selectedRun;
+    expect($run->images)->toBe([['page' => 1, 'path' => "documents/{$document->id}/run-{$run->id}-p1.jpg", 'width' => 1240, 'height' => 2480]])
+        ->and(Storage::disk('local')->get($run->images[0]['path']))->toBe(base64_decode($jpeg))
+        ->and($run->extracted['fields']['total'])->toBe(1280)
+        ->and($document->receipt->field_boxes['total'])->toBe(['page' => 1, 'box' => [102, 200, 640, 240]]);
+    Http::assertSent(fn ($request) => collect($request->data())->firstWhere('name', 'return_image')['contents'] === 'true');
+});

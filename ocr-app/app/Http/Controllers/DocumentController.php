@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreDocumentsRequest;
+use App\Http\Requests\UpdateReceiptRequest;
 use App\Jobs\ProcessDocumentJob;
 use App\Models\Document;
+use App\Models\OcrRun;
+use App\Models\Receipt;
 use App\Ocr\OcrManager;
 use App\Services\DocumentUploader;
-use App\Support\Labels;
+use App\Services\ReceiptCorrector;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
@@ -34,23 +37,16 @@ class DocumentController extends Controller
 
     public function index(Request $request): View
     {
-        $filters = $request->validate([
-            'status' => ['nullable', Rule::in(self::STATUSES)],
-            'type' => ['nullable', Rule::in(array_keys(Labels::TYPES))],
-        ]);
+        $filters = $request->validate(Document::filterRules());
+        $query = $request->user()->documents()->filter($filters);
 
-        $documents = $request->user()->documents()
-            ->with(['selectedRun', 'receipt'])
-            ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
-            ->when($filters['type'] ?? null, fn ($query, $type) => $query->where('type', $type))
-            ->latest('id')
-            ->paginate(30)
-            ->withQueryString();
+        $documents = (clone $query)->with(['selectedRun', 'receipt'])->latest('id')->paginate(30)->withQueryString();
 
         return view('documents.index', [
             'documents' => $documents,
             'filters' => $filters,
             'statuses' => self::STATUSES,
+            'sum' => Receipt::whereIn('document_id', (clone $query)->select('id'))->sum('total'),
             'busy' => $documents->contains(fn (Document $document) => $document->isBusy()),
         ]);
     }
@@ -95,9 +91,14 @@ class DocumentController extends Controller
     {
         Gate::authorize('view', $document);
 
+        $document->load(['selectedRun', 'receipt.taxes', 'receipt.lines']);
+        $checks = $document->checks()->get();
+
         return view('documents.show', [
-            'document' => $document->load(['selectedRun', 'receipt.taxes', 'receipt.lines']),
-            'checks' => $document->checks()->get(),
+            'document' => $document,
+            'checks' => $checks,
+            'hasCritical' => $checks->contains('level', 'critical'),
+            'boxes' => self::boxesByPage($document->selectedRun?->lines ?? []),
             'runs' => $document->ocrRuns()->latest('id')->get(),
             'engines' => $ocr->enabledEngines(),
             'lowConfidence' => (float) config('ocr.confidence_min'),
@@ -123,7 +124,7 @@ class DocumentController extends Controller
         ]);
 
         if (! $document->canTransitionTo(Document::PENDING)) {
-            return back()->withErrors(['rerun' => __('Only failed documents can be re-run.')]);
+            return back()->withErrors(['rerun' => __('This document cannot be re-run now.')]);
         }
 
         $document->transitionTo(Document::PENDING, ['error_message' => null]);
@@ -143,5 +144,84 @@ class DocumentController extends Controller
         $document->deleteWithFile();
 
         return redirect()->route('documents.index')->with('status', __('Document deleted.'));
+    }
+
+    /**
+     * SC-04: save corrections, check them again, and confirm when asked ("保存して確定").
+     */
+    public function update(UpdateReceiptRequest $request, Document $document, ReceiptCorrector $corrector): RedirectResponse
+    {
+        if (! $document->isEditable()) {
+            return back()->withErrors(['review' => __('This document cannot be edited now.')]);
+        }
+
+        $corrector->save($document, $request->corrections());
+
+        if ($request->boolean('confirm')) {
+            $corrector->confirm($document->fresh(), $request->boolean('acknowledged'));
+
+            return redirect()->route('documents.show', $document)->with('status', __('Confirmed.'));
+        }
+
+        return redirect()->route('documents.show', $document)->with('status', __('Saved. The checks were run again.'));
+    }
+
+    public function confirm(Request $request, Document $document, ReceiptCorrector $corrector): RedirectResponse
+    {
+        Gate::authorize('update', $document);
+
+        if (! $document->isEditable()) {
+            return back()->withErrors(['review' => __('This document cannot be confirmed now.')]);
+        }
+
+        $corrector->confirm($document, $request->boolean('acknowledged'));
+
+        return redirect()->route('documents.show', $document)->with('status', __('Confirmed.'));
+    }
+
+    public function reopen(Document $document, ReceiptCorrector $corrector): RedirectResponse
+    {
+        Gate::authorize('update', $document);
+
+        if ($document->status !== Document::CONFIRMED) {
+            return back();
+        }
+
+        $corrector->reopen($document);
+
+        return redirect()->route('documents.show', $document)->with('status', __('Reopened for corrections.'));
+    }
+
+    /**
+     * A preprocessed page image of an OCR run (the image the boxes refer to).
+     */
+    public function page(Document $document, OcrRun $run, int $page): StreamedResponse
+    {
+        Gate::authorize('view', $document);
+        abort_unless($run->document_id === $document->id, 404);
+
+        $image = collect($run->images ?? [])->firstWhere('page', $page) ?? abort(404);
+
+        return Storage::disk('local')->response($image['path'], null, ['Cache-Control' => 'private, max-age=86400']);
+    }
+
+    /**
+     * OCR line boxes per page for the viewer overlay: [left, top, right, bottom, confidence, text].
+     *
+     * @return array<int, list<array>>
+     */
+    private static function boxesByPage(array $lines): array
+    {
+        $pages = [];
+        foreach ($lines as $line) {
+            if (empty($line['bbox'])) {
+                continue;
+            }
+            $xs = array_column($line['bbox'], 0);
+            $ys = array_column($line['bbox'], 1);
+            $pages[$line['page'] ?? 1][] = [min($xs), min($ys), max($xs), max($ys), round((float) $line['confidence'], 2), $line['text']];
+        }
+
+        return $pages;
     }
 }

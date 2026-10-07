@@ -18,13 +18,15 @@ class OcrRun extends Model
 
     protected $fillable = [
         'engine', 'engine_version', 'lines', 'avg_confidence',
-        'critical_failures', 'elapsed_ms', 'error_code',
+        'critical_failures', 'elapsed_ms', 'error_code', 'extracted', 'images',
     ];
 
     protected function casts(): array
     {
         return [
             'lines' => 'array',
+            'extracted' => 'array',
+            'images' => 'array',
             'avg_confidence' => 'decimal:3',
         ];
     }

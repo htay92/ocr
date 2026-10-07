@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDocumentsRequest;
+use App\Http\Requests\UpdateReceiptRequest;
 use App\Http\Resources\DocumentResource;
 use App\Http\Resources\OcrRunResource;
 use App\Jobs\ProcessDocumentJob;
 use App\Models\Document;
 use App\Ocr\OcrManager;
 use App\Services\DocumentUploader;
+use App\Services\ReceiptCorrector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -33,21 +35,13 @@ class DocumentController extends Controller
     }
 
     /**
-     * List the user's documents, newest first. Full filters (date, vendor, amount) come with SC-02.
+     * List the user's documents, newest first, with the SC-02 filters (spec 2.3).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $filters = $request->validate([
-            'status' => ['nullable', Rule::in([
-                Document::PENDING, Document::PROCESSING, Document::EXTRACTED,
-                Document::NEEDS_REVIEW, Document::CONFIRMED, Document::FAILED,
-            ])],
-            'type' => ['nullable', 'string', 'max:20'],
-        ]);
-
         $documents = $request->user()->documents()
-            ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
-            ->when($filters['type'] ?? null, fn ($query, $type) => $query->where('type', $type))
+            ->filter($request->validate(Document::filterRules()))
+            ->with('receipt')
             ->latest('id')
             ->paginate(50);
 
@@ -58,7 +52,7 @@ class DocumentController extends Controller
     {
         Gate::authorize('view', $document);
 
-        return new DocumentResource($document->load('selectedRun'));
+        return new DocumentResource($document->load(['selectedRun', 'receipt.taxes', 'receipt.lines']));
     }
 
     /**
@@ -82,7 +76,8 @@ class DocumentController extends Controller
     }
 
     /**
-     * Re-run a failed document, optionally with a specific engine.
+     * Re-run a document (failed, extracted or needing review), optionally with a specific engine.
+     * Corrections are replaced by the new reading.
      */
     public function rerun(Request $request, Document $document, OcrManager $ocr): JsonResponse
     {
@@ -94,7 +89,7 @@ class DocumentController extends Controller
 
         if (! $document->canTransitionTo(Document::PENDING)) {
             return response()->json([
-                'message' => "Only failed documents can be re-run; this one is {$document->status}.",
+                'message' => "This document cannot be re-run while it is {$document->status}.",
             ], 409);
         }
 
@@ -118,5 +113,49 @@ class DocumentController extends Controller
         $document->deleteWithFile();
 
         return response()->noContent();
+    }
+
+    /**
+     * Save corrections (spec 2.3 PUT /api/documents/{id}): type, fields, taxes[], lines[].
+     * The checks run again and come back in the response.
+     */
+    public function update(UpdateReceiptRequest $request, Document $document, ReceiptCorrector $corrector): JsonResponse|DocumentResource
+    {
+        if (! $document->isEditable()) {
+            return response()->json(['message' => "The document cannot be edited while it is {$document->status}."], 409);
+        }
+
+        $corrector->save($document, $request->corrections());
+
+        return new DocumentResource($document->fresh()->load(['selectedRun', 'receipt.taxes', 'receipt.lines']));
+    }
+
+    /**
+     * Mark as confirmed (spec 2.3). With failing critical checks, send "acknowledged": true.
+     */
+    public function confirm(Request $request, Document $document, ReceiptCorrector $corrector): JsonResponse|DocumentResource
+    {
+        Gate::authorize('update', $document);
+
+        if (! $document->isEditable()) {
+            return response()->json(['message' => "The document cannot be confirmed while it is {$document->status}."], 409);
+        }
+
+        $corrector->confirm($document, $request->boolean('acknowledged'));
+
+        return new DocumentResource($document->fresh()->load(['selectedRun', 'receipt.taxes', 'receipt.lines']));
+    }
+
+    public function reopen(Document $document, ReceiptCorrector $corrector): JsonResponse|DocumentResource
+    {
+        Gate::authorize('update', $document);
+
+        if ($document->status !== Document::CONFIRMED) {
+            return response()->json(['message' => 'Only confirmed documents can be reopened.'], 409);
+        }
+
+        $corrector->reopen($document);
+
+        return new DocumentResource($document->fresh());
     }
 }

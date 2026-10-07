@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Support\Labels;
 use Database\Factories\DocumentFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use LogicException;
 
 /**
@@ -53,9 +56,10 @@ class Document extends Model
         self::PENDING => [self::PROCESSING, self::FAILED],
         self::PROCESSING => [self::EXTRACTED, self::NEEDS_REVIEW, self::FAILED],
         self::FAILED => [self::PENDING],
-        self::EXTRACTED => [self::CONFIRMED],
-        self::NEEDS_REVIEW => [self::CONFIRMED],
-        self::CONFIRMED => [],
+        // Extended in milestone 5: re-run from the review screen, and reopen a confirmed document.
+        self::EXTRACTED => [self::CONFIRMED, self::PENDING],
+        self::NEEDS_REVIEW => [self::CONFIRMED, self::PENDING],
+        self::CONFIRMED => [self::NEEDS_REVIEW],
     ];
 
     protected $fillable = [
@@ -74,10 +78,19 @@ class Document extends Model
         ];
     }
 
-    /** A running job is still writing to it. */
+    /**
+     * Not while a job is writing to it, and not once confirmed: confirmed
+     * documents are tax records kept for 7 years (NFR-06); reopen first.
+     */
     public function canBeDeleted(): bool
     {
-        return $this->status !== self::PROCESSING;
+        return ! in_array($this->status, [self::PROCESSING, self::CONFIRMED], true);
+    }
+
+    /** Fields can be corrected (SC-04) once processing has finished, until confirmed. */
+    public function isEditable(): bool
+    {
+        return in_array($this->status, [self::EXTRACTED, self::NEEDS_REVIEW], true);
     }
 
     /**
@@ -92,6 +105,7 @@ class Document extends Model
 
         $this->delete();
         Storage::disk('local')->delete($this->file_path);
+        Storage::disk('local')->deleteDirectory("documents/{$this->id}");   // preprocessed page images
     }
 
     /** Still queued or running; the screens refresh until this is false. */
@@ -119,6 +133,44 @@ class Document extends Model
         }
 
         $this->update(['status' => $status, ...$attributes]);
+    }
+
+    /**
+     * List filters (SC-02, spec 2.3): status, type, date_from, date_to, vendor, min_total, max_total.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function scopeFilter(Builder $query, array $filters): void
+    {
+        $query
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($filters['type'] ?? null, fn ($q, $type) => $q->where('type', $type));
+
+        $receipt = array_filter(array_intersect_key($filters, array_flip(['date_from', 'date_to', 'vendor', 'min_total', 'max_total'])), fn ($v) => $v !== null && $v !== '');
+        if ($receipt !== []) {
+            $query->whereHas('receipt', fn ($q) => $q
+                ->when($receipt['date_from'] ?? null, fn ($q, $from) => $q->whereDate('issue_date', '>=', $from))
+                ->when($receipt['date_to'] ?? null, fn ($q, $to) => $q->whereDate('issue_date', '<=', $to))
+                ->when($receipt['vendor'] ?? null, fn ($q, $vendor) => $q->whereRaw('LOWER(vendor_name) LIKE ?', ['%'.mb_strtolower($vendor).'%']))
+                ->when(isset($receipt['min_total']), fn ($q) => $q->where('total', '>=', (int) $receipt['min_total']))
+                ->when(isset($receipt['max_total']), fn ($q) => $q->where('total', '<=', (int) $receipt['max_total'])));
+        }
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    public static function filterRules(): array
+    {
+        return [
+            'status' => ['nullable', Rule::in(array_keys(self::TRANSITIONS))],
+            'type' => ['nullable', Rule::in(array_keys(Labels::TYPES))],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+            'vendor' => ['nullable', 'string', 'max:100'],
+            'min_total' => ['nullable', 'integer', 'min:0'],
+            'max_total' => ['nullable', 'integer', 'min:0'],
+        ];
     }
 
     /**
@@ -156,14 +208,19 @@ class Document extends Model
     }
 
     /**
-     * Validation results of the selected run. Query it directly; it cannot be
-     * eager-loaded, because it depends on this document's selected_run_id.
+     * The current checks: those of the user's last correction when there is one
+     * (stored without an OCR run), otherwise those of the selected run. Query it
+     * directly; it cannot be eager-loaded.
      *
      * @return HasMany<ValidationResult, $this>
      */
     public function checks(): HasMany
     {
-        return $this->validationResults()->where('ocr_run_id', $this->selected_run_id)->orderBy('rule_code');
+        $manual = $this->validationResults()->whereNull('ocr_run_id')->exists();
+
+        return $this->validationResults()
+            ->when($manual, fn ($query) => $query->whereNull('ocr_run_id'), fn ($query) => $query->where('ocr_run_id', $this->selected_run_id))
+            ->orderBy('rule_code');
     }
 
     /**

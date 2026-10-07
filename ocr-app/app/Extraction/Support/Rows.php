@@ -94,6 +94,7 @@ final class Rows
                 'top' => $ys ? (float) min($ys) : null,
                 'bottom' => $ys ? (float) max($ys) : null,
                 'left' => $xs ? (float) min($xs) : null,
+                'right' => $xs ? (float) max($xs) : null,
                 'order' => $i,
             ];
         }
@@ -139,6 +140,10 @@ final class Rows
             page: $first['page'],
             top: $first['top'] === null ? null : (float) min(array_column($lines, 'top')),
             height: $first['top'] === null ? null : (float) max(array_map(fn ($l) => $l['bottom'] - $l['top'], $lines)),
+            box: $first['top'] === null ? null : [
+                (int) min(array_column($lines, 'left')), (int) min(array_column($lines, 'top')),
+                (int) max(array_column($lines, 'right')), (int) max(array_column($lines, 'bottom')),
+            ],
         );
     }
 }

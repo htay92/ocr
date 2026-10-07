@@ -52,7 +52,7 @@ class DocumentAnalyzer
         }
 
         $analysis = new Analysis($run, $type, $extracted, $results);
-        $run->update(['critical_failures' => $analysis->criticalFailures()]);
+        $run->update(['critical_failures' => $analysis->criticalFailures(), 'extracted' => $extracted->toArray()]);
 
         return $analysis;
     }
@@ -64,6 +64,9 @@ class DocumentAnalyzer
      */
     public function apply(Document $document, Analysis $analysis, string $status, array $attributes = []): void
     {
+        // A new reading replaces earlier corrections and their checks.
+        $document->validationResults()->whereNull('ocr_run_id')->delete();
+
         if ($analysis->extracted !== null) {
             Receipt::saveExtracted($document, $analysis->extracted);
         } else {

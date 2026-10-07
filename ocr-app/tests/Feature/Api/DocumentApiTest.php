@@ -108,12 +108,12 @@ it('re-runs a failed document with a chosen engine', function () {
         ->and($document->ocrRuns()->count())->toBe(1);
 });
 
-it('only re-runs failed documents, with enabled engines', function () {
+it('does not re-run confirmed or running documents, and only with enabled engines', function () {
     Sanctum::actingAs($this->user);
-    $extracted = Document::factory()->for($this->user)->status('extracted')->create();
+    $confirmed = Document::factory()->for($this->user)->status('confirmed')->create();
     $failed = Document::factory()->for($this->user)->status('failed')->create();
 
-    $this->postJson("/api/documents/{$extracted->id}/rerun")->assertStatus(409);
+    $this->postJson("/api/documents/{$confirmed->id}/rerun")->assertStatus(409);
     $this->postJson("/api/documents/{$failed->id}/rerun", ['engine' => 'cloud'])->assertUnprocessable();
 });
 
@@ -141,4 +141,43 @@ it('deletes a document through the API', function () {
 
     expect(Document::pluck('id')->all())->toBe([$busy->id]);
     Storage::disk('local')->assertMissing('documents/a.png');
+});
+
+it('saves corrections, confirms and reopens through the API', function () {
+    Sanctum::actingAs($this->user);
+    $document = Document::factory()->for($this->user)->status('needs_review')->create(['type' => 'receipt']);
+
+    $this->putJson("/api/documents/{$document->id}", [
+        'type' => 'receipt',
+        'fields' => ['vendor_name' => 'ローソン', 'issue_date' => '2026-10-01', 'total' => 1280],
+        'taxes' => [['tax_rate' => 8, 'taxable_amount' => 1280, 'tax_amount' => 94]],
+        'lines' => [],
+    ])->assertOk()
+        ->assertJsonPath('data.receipt.fields.total', 1280)
+        ->assertJsonPath('data.receipt.taxes.0.tax_amount', 94)
+        ->assertJsonPath('data.checks.0.rule_code', 'V-01');
+
+    $this->postJson("/api/documents/{$document->id}/confirm")->assertOk()->assertJsonPath('data.status', 'confirmed');
+    $this->putJson("/api/documents/{$document->id}", ['type' => 'receipt', 'fields' => []])->assertStatus(409);
+    $this->postJson("/api/documents/{$document->id}/reopen")->assertOk()->assertJsonPath('data.status', 'needs_review');
+});
+
+it('refuses to confirm through the API with failing critical checks unless acknowledged', function () {
+    Sanctum::actingAs($this->user);
+    $document = Document::factory()->for($this->user)->status('needs_review')->create(['type' => 'receipt']);
+    $this->putJson("/api/documents/{$document->id}", ['type' => 'receipt', 'fields' => ['total' => 1280]]);   // no date: V-02
+
+    $this->postJson("/api/documents/{$document->id}/confirm")->assertStatus(422)->assertJsonValidationErrors('acknowledged');
+    $this->postJson("/api/documents/{$document->id}/confirm", ['acknowledged' => true])->assertOk();
+});
+
+it('filters the API list like the list screen (spec 2.3)', function () {
+    Sanctum::actingAs($this->user);
+    foreach ([['welcia', '2025-11-08', 1020], ['LAWSON', '2026-10-01', 210]] as [$vendor, $date, $total]) {
+        Document::factory()->for($this->user)->status('extracted')->create()->receipt()->create(['vendor_name' => $vendor, 'issue_date' => $date, 'total' => $total]);
+    }
+
+    $this->getJson('/api/documents?vendor=law')->assertJsonCount(1, 'data');
+    $this->getJson('/api/documents?date_from=2025-01-01&date_to=2025-12-31&min_total=1000')->assertJsonCount(1, 'data');
+    $this->getJson('/api/documents?max_total=100')->assertJsonCount(0, 'data');
 });

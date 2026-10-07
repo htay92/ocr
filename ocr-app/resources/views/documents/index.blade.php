@@ -7,27 +7,45 @@
         <a class="button" href="{{ route('documents.create') }}" style="flex:0 0 auto">{{ __('Upload') }}</a>
     </div>
 
-    <form method="GET" class="row card" style="margin-bottom:16px">
-        <div>
-            <label for="status">{{ __('Status') }}</label>
-            <select id="status" name="status">
-                <option value="">{{ __('All') }}</option>
-                @foreach ($statuses as $status)
-                    <option value="{{ $status }}" @selected(($filters['status'] ?? null) === $status)>{{ Labels::status($status) }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div>
-            <label for="type">{{ __('Type') }}</label>
-            <select id="type" name="type">
-                <option value="">{{ __('All') }}</option>
-                @foreach (array_keys(Labels::TYPES) as $type)
-                    <option value="{{ $type }}" @selected(($filters['type'] ?? null) === $type)>{{ Labels::type($type) }}</option>
-                @endforeach
-            </select>
-        </div>
-        <button class="button secondary" type="submit">{{ __('Filter') }}</button>
-    </form>
+    @php $active = collect($filters)->filter(fn ($v) => $v !== null && $v !== '')->isNotEmpty(); @endphp
+    <details class="card filters" @if ($active) open @endif>
+        <summary>{{ __('Filter') }}@if ($active) · {{ __('on') }}@endif</summary>
+        <form method="GET" class="filter-grid">
+            <label class="field"><span class="label">{{ __('Status') }}</span>
+                <select name="status">
+                    <option value="">{{ __('All') }}</option>
+                    @foreach ($statuses as $status)
+                        <option value="{{ $status }}" @selected(($filters['status'] ?? null) === $status)>{{ Labels::status($status) }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="field"><span class="label">{{ __('Type') }}</span>
+                <select name="type">
+                    <option value="">{{ __('All') }}</option>
+                    @foreach (array_keys(Labels::TYPES) as $type)
+                        <option value="{{ $type }}" @selected(($filters['type'] ?? null) === $type)>{{ Labels::type($type) }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="field"><span class="label">{{ __('From') }}</span><input type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}"></label>
+            <label class="field"><span class="label">{{ __('To') }}</span><input type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}"></label>
+            <label class="field wide"><span class="label">{{ __('Vendor contains') }}</span><input type="text" name="vendor" value="{{ $filters['vendor'] ?? '' }}"></label>
+            <label class="field"><span class="label">{{ __('Total from') }}</span><input type="text" inputmode="numeric" name="min_total" value="{{ $filters['min_total'] ?? '' }}"></label>
+            <label class="field"><span class="label">{{ __('Total to') }}</span><input type="text" inputmode="numeric" name="max_total" value="{{ $filters['max_total'] ?? '' }}"></label>
+            @foreach (['date_from', 'date_to', 'min_total', 'max_total'] as $key)
+                @error($key) <span class="error-text wide">{{ $message }}</span> @enderror
+            @endforeach
+            <div class="row wide">
+                <button class="button" type="submit">{{ __('Filter') }}</button>
+                <a class="button secondary" href="{{ route('documents.index') }}">{{ __('Clear') }}</a>
+            </div>
+        </form>
+    </details>
+
+    <p class="list-summary">
+        <strong>{{ trans_choice('{0} No documents|{1} 1 document|[2,*] :count documents', $documents->total()) }}</strong>
+        @if ($sum) · {{ __('Total of these documents') }} <strong>¥{{ number_format($sum) }}</strong> @endif
+    </p>
 
     @if ($busy)
         <p class="muted small">{{ __('Processing… this page refreshes every 5 seconds.') }}</p>
@@ -35,7 +53,7 @@
 
     @if ($documents->isEmpty())
         <div class="card empty">
-            <p>{{ __('No documents yet.') }}</p>
+            <p>{{ $active ? __('No documents match these filters.') : __('No documents yet.') }}</p>
             <a class="button" href="{{ route('documents.create') }}">{{ __('Upload receipts or invoices') }}</a>
         </div>
     @else

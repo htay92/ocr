@@ -13,5 +13,7 @@ final readonly class Row
         public int $page = 1,
         public ?float $top = null,
         public ?float $height = null,
+        /** Union of the line boxes: [left, top, right, bottom] in preprocessed-image pixels. */
+        public ?array $box = null,
     ) {}
 }

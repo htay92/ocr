@@ -18,6 +18,9 @@ it('allows the transitions in the spec state diagram', function (string $from, s
     ['extracted', 'confirmed'],
     ['needs_review', 'confirmed'],
     'a job that dies before it starts' => ['pending', 'failed'],
+    're-run from the review screen' => ['extracted', 'pending'],
+    're-run a document needing review' => ['needs_review', 'pending'],
+    'reopen a confirmed document' => ['confirmed', 'needs_review'],
 ]);
 
 it('refuses transitions the spec does not allow', function (string $from, string $to) {
@@ -39,3 +42,9 @@ it('stamps confirmed_at when a document is confirmed', function () {
 
     expect($document->fresh()->confirmed_at)->not->toBeNull();
 });
+
+it('protects running and confirmed documents from deletion', function (string $status, bool $deletable) {
+    expect(Document::factory()->status($status)->make()->canBeDeleted())->toBe($deletable);
+})->with([
+    ['processing', false], ['confirmed', false], ['pending', true], ['extracted', true], ['needs_review', true], ['failed', true],
+]);

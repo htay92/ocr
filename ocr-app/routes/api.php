@@ -15,4 +15,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('documents/{document}/file', [DocumentController::class, 'file']);
     Route::post('documents/{document}/rerun', [DocumentController::class, 'rerun']);
     Route::delete('documents/{document}', [DocumentController::class, 'destroy']);
+    Route::put('documents/{document}', [DocumentController::class, 'update']);
+    Route::post('documents/{document}/confirm', [DocumentController::class, 'confirm']);
+    Route::post('documents/{document}/reopen', [DocumentController::class, 'reopen']);
 });

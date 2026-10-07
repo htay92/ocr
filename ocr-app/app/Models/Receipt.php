@@ -21,7 +21,7 @@ class Receipt extends Model
         'paid_receipt' => ['vendor_name', 'issue_date', 'total'],
     ];
 
-    protected $fillable = [...ExtractedDocument::FIELDS, 'field_confidence'];
+    protected $fillable = [...ExtractedDocument::FIELDS, 'field_confidence', 'field_boxes', 'corrected_fields'];
 
     protected function casts(): array
     {
@@ -29,6 +29,8 @@ class Receipt extends Model
             'issue_date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',
             'field_confidence' => 'array',
+            'field_boxes' => 'array',
+            'corrected_fields' => 'array',
         ];
     }
 
@@ -39,7 +41,11 @@ class Receipt extends Model
     {
         $document->receipt()->delete();
 
-        $receipt = $document->receipt()->create([...$extracted->fields, 'field_confidence' => $extracted->fieldConfidence]);
+        $receipt = $document->receipt()->create([
+            ...$extracted->fields,
+            'field_confidence' => $extracted->fieldConfidence,
+            'field_boxes' => $extracted->fieldBoxes,
+        ]);
         $receipt->taxes()->createMany($extracted->taxes);
         $receipt->lines()->createMany($extracted->lines);
 

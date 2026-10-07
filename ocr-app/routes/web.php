@@ -28,6 +28,10 @@ Route::middleware('auth')->group(function () {
     Route::post('documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::get('documents/{document}', [DocumentController::class, 'show'])->name('documents.show');
     Route::get('documents/{document}/file', [DocumentController::class, 'file'])->name('documents.file');
+    Route::get('documents/{document}/runs/{run}/pages/{page}', [DocumentController::class, 'page'])->whereNumber('page')->name('documents.page');
     Route::post('documents/{document}/rerun', [DocumentController::class, 'rerun'])->name('documents.rerun');
     Route::delete('documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
+    Route::put('documents/{document}', [DocumentController::class, 'update'])->name('documents.update');
+    Route::post('documents/{document}/confirm', [DocumentController::class, 'confirm'])->name('documents.confirm');
+    Route::post('documents/{document}/reopen', [DocumentController::class, 'reopen'])->name('documents.reopen');
 });

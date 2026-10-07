@@ -19,12 +19,14 @@ final class ExtractedDocument
      * @param  list<array{tax_rate: int, taxable_amount: int, tax_amount: int}>  $taxes
      * @param  list<array{line_no: int, name: string, quantity: float, unit_price: ?int, amount: int, tax_rate: int, discount: int}>  $lines
      * @param  array<string, float>  $fieldConfidence  OCR confidence of the row each field came from
+     * @param  array<string, array{page: int, box: array{0: int, 1: int, 2: int, 3: int}}>  $fieldBoxes  where each field was read
      */
     public function __construct(
         public array $fields,
         public array $taxes = [],
         public array $lines = [],
         public array $fieldConfidence = [],
+        public array $fieldBoxes = [],
     ) {
         $this->fields = array_merge(array_fill_keys(self::FIELDS, null), $fields);
     }
@@ -37,5 +39,13 @@ final class ExtractedDocument
     public function taxTotal(): int
     {
         return array_sum(array_column($this->taxes, 'tax_amount'));
+    }
+
+    /**
+     * Fields, taxes and lines as stored on an OCR run (ocr_runs.extracted).
+     */
+    public function toArray(): array
+    {
+        return ['fields' => $this->fields, 'taxes' => $this->taxes, 'lines' => $this->lines];
     }
 }

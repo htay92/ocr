@@ -108,6 +108,10 @@ class RuleExtractor implements Extractor
             taxes: $taxes['rows'],
             lines: $this->lineItems($type),
             fieldConfidence: array_map(fn (int $i) => $this->rows[$i]->confidence, $this->source),
+            fieldBoxes: array_filter(array_map(
+                fn (int $i) => $this->rows[$i]->box === null ? null : ['page' => $this->rows[$i]->page, 'box' => $this->rows[$i]->box],
+                $this->source,
+            )),
         );
     }
 

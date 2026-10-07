@@ -122,7 +122,8 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
 
             foreach ($this->engine ? [$this->engine] : $ocr->fallbackOrder() as $name) {
                 try {
-                    $results = array_map(fn (string $page) => $ocr->driver($name)->recognize($page), $pages);
+                    // The preprocessed page comes back too, so the review screen can draw the boxes on it.
+                    $results = array_map(fn (string $page) => $ocr->driver($name)->recognize($page, ['return_image' => true]), $pages);
                 } catch (OcrException $e) {
                     $document->ocrRuns()->create(['engine' => $name, 'error_code' => $e->errorCode]);
                     $lastError = $e;
@@ -135,6 +136,7 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
                 }
 
                 $run = $document->ocrRuns()->create($this->runAttributes($name, $results));
+                $this->saveImages($document, $run, $results);
                 $analysis = $this->analyzer->analyse($document, $run);
 
                 if ($analysis->criticalFailures() === 0) {
@@ -186,6 +188,28 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
             'avg_confidence' => $lines === [] ? null : array_sum(array_column($lines, 'confidence')) / count($lines),
             'elapsed_ms' => array_sum(array_map(fn (OcrResult $result) => $result->elapsedMs, $results)),
         ];
+    }
+
+    /**
+     * Save the engine's preprocessed page images (the coordinate space of the OCR boxes).
+     *
+     * @param  list<OcrResult>  $results
+     */
+    private function saveImages(Document $document, OcrRun $run, array $results): void
+    {
+        $images = [];
+        foreach ($results as $page => $result) {
+            if ($result->preprocessedImage === null) {
+                continue;
+            }
+            $path = "documents/{$document->id}/run-{$run->id}-p".($page + 1).'.jpg';
+            Storage::disk('local')->put($path, base64_decode($result->preprocessedImage));
+            $images[] = ['page' => $page + 1, 'path' => $path, 'width' => $result->image['width'], 'height' => $result->image['height']];
+        }
+
+        if ($images !== []) {
+            $run->update(['images' => $images]);
+        }
     }
 
     /**
