@@ -33,6 +33,14 @@ class OcrManager extends Manager
         return array_values(array_filter($names, fn (string $name) => (bool) $this->config->get("ocr.engines.{$name}.enabled")));
     }
 
+    /**
+     * @return list<string>
+     */
+    public function enabledEngines(): array
+    {
+        return array_keys(array_filter($this->config->get('ocr.engines', []), fn (array $engine) => (bool) ($engine['enabled'] ?? false)));
+    }
+
     protected function createDriver($driver): OcrEngine
     {
         if (isset($this->customCreators[$driver])) {

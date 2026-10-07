@@ -1,0 +1,171 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Models\Document;
+use App\Models\OcrRun;
+use App\Ocr\Data\OcrResult;
+use App\Ocr\OcrException;
+use App\Ocr\OcrManager;
+use App\Processing\InputRouter;
+use App\Processing\PdfRasterizer;
+use App\Processing\PdfTextExtractor;
+use App\Processing\ProcessingException;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
+
+/**
+ * Processes one uploaded document (spec 2.4, 3.1): route, OCR with fallback, save.
+ */
+class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
+{
+    use Queueable;
+
+    // Engine retries happen inside HttpOcrEngine; a retried job would run every engine again.
+    public int $tries = 1;
+
+    // Must stay below REDIS_QUEUE_RETRY_AFTER (960 s); see config/ocr.php.
+    public int $timeout = 900;
+
+    /**
+     * @param  ?string  $engine  run only this engine (re-run), instead of the fallback order
+     */
+    public function __construct(
+        public Document $document,
+        public ?string $engine = null,
+    ) {}
+
+    public function uniqueId(): string
+    {
+        return (string) $this->document->id;
+    }
+
+    public function handle(OcrManager $ocr, InputRouter $router, PdfTextExtractor $pdfText, PdfRasterizer $rasterizer): void
+    {
+        $document = $this->document;
+        $document->transitionTo(Document::PROCESSING, ['error_message' => null]);
+        $path = Storage::disk('local')->path($document->file_path);
+
+        try {
+            $route = $router->route($path, $document->mime_type);
+            $document->update(['route' => $route]);
+
+            match ($route) {
+                Document::ROUTE_SPREADSHEET => $document->transitionTo(Document::FAILED, [
+                    'error_message' => 'Attendance import (CSV/Excel) arrives in milestone 6.',
+                ]),
+                Document::ROUTE_PDF_TEXT => $this->readTextLayer($document, $pdfText->extract($path) ?? ''),
+                Document::ROUTE_OCR => $this->runOcr($document, $path, $ocr, $rasterizer),
+            };
+        } catch (ProcessingException $e) {
+            $document->transitionTo(Document::FAILED, ['error_message' => "{$e->errorCode}: {$e->getMessage()}"]);
+        }
+    }
+
+    /**
+     * A system error (crash, timeout) must never leave the document stuck in processing.
+     */
+    public function failed(Throwable $e): void
+    {
+        $document = $this->document->fresh();
+
+        if ($document?->canTransitionTo(Document::FAILED)) {
+            $document->transitionTo(Document::FAILED, ['error_message' => $e->getMessage()]);
+        }
+    }
+
+    private function readTextLayer(Document $document, string $text): void
+    {
+        $started = hrtime(true);
+        $lines = [];
+        foreach (explode("\f", $text) as $page => $pageText) {
+            foreach (preg_split('/\R/u', $pageText) as $line) {
+                if (trim($line) !== '') {
+                    $lines[] = ['text' => trim($line), 'confidence' => 1.0, 'bbox' => null, 'page' => $page + 1];
+                }
+            }
+        }
+
+        $run = $document->ocrRuns()->create([
+            'engine' => OcrRun::PDF_TEXT,
+            'lines' => $lines,
+            'avg_confidence' => 1,
+            'elapsed_ms' => intdiv(hrtime(true) - $started, 1_000_000),
+        ]);
+
+        $this->select($document, $run);
+    }
+
+    private function runOcr(Document $document, string $path, OcrManager $ocr, PdfRasterizer $rasterizer): void
+    {
+        $pages = $document->mime_type === 'application/pdf' ? $rasterizer->pages($path) : [$path];
+
+        try {
+            $lastError = null;
+
+            foreach ($this->engine ? [$this->engine] : $ocr->fallbackOrder() as $name) {
+                try {
+                    $results = array_map(fn (string $page) => $ocr->driver($name)->recognize($page), $pages);
+                } catch (OcrException $e) {
+                    $document->ocrRuns()->create(['engine' => $name, 'error_code' => $e->errorCode]);
+                    $lastError = $e;
+
+                    if ($e->errorCode === 'invalid_image') {
+                        break; // another engine would reject the same file
+                    }
+
+                    continue;
+                }
+
+                $run = $document->ocrRuns()->create($this->runAttributes($name, $results));
+
+                // Milestone 4: classify, extract and validate here; on critical failures
+                // continue with the next engine instead of selecting this run (FR-09).
+
+                $this->select($document, $run);
+
+                return;
+            }
+
+            $code = $lastError?->errorCode === 'invalid_image' ? 'invalid_image' : OcrException::UNREACHABLE;
+            $document->transitionTo(Document::FAILED, [
+                'error_message' => "{$code}: ".($lastError?->getMessage() ?? 'no OCR engine is enabled'),
+            ]);
+        } finally {
+            if ($pages !== [$path]) {
+                $rasterizer->cleanup($pages);
+            }
+        }
+    }
+
+    /**
+     * Merge the per-page results of one engine into one run.
+     *
+     * @param  list<OcrResult>  $results
+     */
+    private function runAttributes(string $engine, array $results): array
+    {
+        $lines = [];
+        foreach ($results as $page => $result) {
+            foreach ($result->lines as $line) {
+                $lines[] = ['text' => $line->text, 'confidence' => $line->confidence, 'bbox' => $line->bbox, 'page' => $page + 1];
+            }
+        }
+
+        return [
+            'engine' => $engine,
+            'engine_version' => $results[0]->engineVersion,
+            'lines' => $lines,
+            'avg_confidence' => $lines === [] ? null : array_sum(array_column($lines, 'confidence')) / count($lines),
+            'elapsed_ms' => array_sum(array_map(fn (OcrResult $result) => $result->elapsedMs, $results)),
+        ];
+    }
+
+    private function select(Document $document, OcrRun $run): void
+    {
+        $document->transitionTo(Document::EXTRACTED, ['selected_run_id' => $run->id]);
+    }
+}

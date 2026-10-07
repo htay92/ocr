@@ -24,6 +24,11 @@ return [
     'retries' => (int) env('OCR_RETRIES', 3),
     'backoff' => [10, 30, 90],
 
+    // Upload limit per file in MB (spec 3.6, FR-01).
+    'upload' => [
+        'max_mb' => (int) env('UPLOAD_MAX_MB', 20),
+    ],
+
     'engines' => [
 
         'paddle' => [
