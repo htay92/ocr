@@ -1,0 +1,80 @@
+name: ocr
+
+x-php: &php
+  build:
+    context: .
+    dockerfile: docker/php/Dockerfile
+    args:
+      UID: ${DOCKER_UID:-1000}
+      GID: ${DOCKER_GID:-1000}
+  image: ocr-app-php
+  volumes:
+    - ./ocr-app:/var/www/html
+  # No env_file: Laravel reads ocr-app/.env itself. Injected env vars would
+  # outrank phpunit.xml, so tests would hit the dev database and Redis.
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  app:
+    <<: *php
+
+  worker:
+    <<: *php
+    # Timeouts must nest: OCR calls with retries < --timeout < REDIS_QUEUE_RETRY_AFTER,
+    # otherwise a slow job is started a second time.
+    command: php artisan queue:work --tries=1 --timeout=900
+    restart: unless-stopped
+
+  web:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"   # the only host port (spec 2.6)
+    volumes:
+      - ./ocr-app:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+  db:
+    # Production database. Development uses SQLite (ocr-app/database/database.sqlite).
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ocr
+      POSTGRES_USER: ocr
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocr -d ocr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+
+  ocr-paddle:
+    build: engines/ocr-paddle
+    image: ocr-paddle
+    # PaddlePaddle's linux/arm64 CPU build segfaults on model load,
+    # so on Apple Silicon this runs the x86 build under emulation.
+    platform: linux/amd64
+    environment:
+      PADDLE_DET_LIMIT: "960"
+    # No ports: reachable only on the internal network (spec 2.1).
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
