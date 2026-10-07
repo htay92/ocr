@@ -9,5 +9,5 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ValidationResult extends Model
 {
-    protected $fillable = ['document_id', 'ocr_run_id', 'rule_code', 'level', 'message'];
+    protected $fillable = ['document_id', 'ocr_run_id', 'attendance_sheet_id', 'rule_code', 'level', 'message'];
 }

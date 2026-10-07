@@ -230,3 +230,21 @@ details.more h3 { font-size: 1rem; margin: 16px 0 6px; }
 .filter-grid input, .filter-grid select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; min-height: 42px; }
 .list-summary { margin: 4px 2px 12px; color: var(--muted); }
 .list-summary strong { color: var(--text); }
+
+/* Attendance (SC-06) */
+.sheet { margin-bottom: 16px; }
+.sheet-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+.sheet-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 0 0 10px; }
+.sheet-summary div { background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.sheet-summary dt { font-size: .75rem; color: var(--muted); }
+.sheet-summary dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.att-table td, .att-table th { padding: 5px 8px; }
+.att-table tr.saturday td { background: rgba(37, 87, 214, .08); }
+.att-table tr.holiday td { background: rgba(220, 38, 38, .08); }
+.att-table tr.saturday td:first-child { color: var(--info); }
+.att-table tr.holiday td:first-child { color: var(--danger); }
+.att-table .holiday-name { display: block; font-size: .7rem; }
+.checks .badge:empty, .checks .badge:not(.pass):not(.warning):not(.critical) { background: var(--bg); color: var(--muted); }
+
+/* Documents without a picture (CSV / Excel attendance): one column. */
+.detail.single { grid-template-columns: minmax(0, 1fr); }

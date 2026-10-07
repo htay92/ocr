@@ -198,6 +198,14 @@ class Document extends Model
     }
 
     /**
+     * @return HasMany<AttendanceSheet, $this>
+     */
+    public function attendanceSheets(): HasMany
+    {
+        return $this->hasMany(AttendanceSheet::class)->orderBy('employee_name');
+    }
+
+    /**
      * Validation results of every run.
      *
      * @return HasMany<ValidationResult, $this>
@@ -216,9 +224,10 @@ class Document extends Model
      */
     public function checks(): HasMany
     {
-        $manual = $this->validationResults()->whereNull('ocr_run_id')->exists();
+        $manual = $this->validationResults()->whereNull('ocr_run_id')->whereNull('attendance_sheet_id')->exists();
 
         return $this->validationResults()
+            ->whereNull('attendance_sheet_id')
             ->when($manual, fn ($query) => $query->whereNull('ocr_run_id'), fn ($query) => $query->where('ocr_run_id', $this->selected_run_id))
             ->orderBy('rule_code');
     }

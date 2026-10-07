@@ -31,15 +31,31 @@
         </div>
     @endif
 
-    <div class="detail">
-        <div class="viewer-column">
-            @include('documents._viewer')
-        </div>
+    @php $hasPicture = str_starts_with($document->mime_type, 'image/') || $document->mime_type === 'application/pdf'; @endphp
+    <div @class(['detail', 'single' => ! $hasPicture])>
+        @if ($hasPicture)
+            <div class="viewer-column">
+                @include('documents._viewer')
+            </div>
+        @endif
 
         <div>
-            @include('documents._validation')
+            @if ($document->type !== 'attendance') @include('documents._validation') @endif
 
-            @if ($document->isEditable() && $document->type !== 'attendance')
+            @if ($document->type === 'attendance')
+                @forelse ($document->attendanceSheets as $sheet)
+                    <h2>{{ __('Checks') }} · {{ $sheet->employee_name }}</h2>
+                    @include('attendance._checks', ['results' => $sheet->checks->map->only(['rule_code', 'level', 'message'])->all()])
+                    @include('attendance._sheet', ['sheet' => \App\Attendance\SheetView::fromModel($sheet)])
+                @empty
+                    @if (! $document->isBusy())
+                        <div class="card">
+                            <p>{{ __('This looks like an attendance file. Import it to read the days and check the totals.') }}</p>
+                            <a class="button" href="{{ route('attendance.preview', 'd-'.$document->id) }}">{{ __('Import as attendance') }}</a>
+                        </div>
+                    @endif
+                @endforelse
+            @elseif ($document->isEditable())
                 @include('documents._form')
             @elseif ($receipt = $document->receipt)
                 @include('documents._receipt')

@@ -1,8 +1,9 @@
 FROM php:8.3-fpm-bookworm
 
-# poppler-utils: pdftotext / pdftoppm for PDF text layers and page rendering.
+# poppler-utils: pdftotext / pdftoppm for PDF text layers and page rendering;
+# poppler-data: CJK font mappings, without which Japanese text in some PDFs is lost.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        poppler-utils git unzip curl \
+        poppler-utils poppler-data git unzip curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/

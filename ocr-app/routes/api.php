@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\EngineController;
 use Illuminate\Support\Facades\Route;
@@ -18,4 +19,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('documents/{document}', [DocumentController::class, 'update']);
     Route::post('documents/{document}/confirm', [DocumentController::class, 'confirm']);
     Route::post('documents/{document}/reopen', [DocumentController::class, 'reopen']);
+
+    Route::post('attendance/import', [AttendanceController::class, 'import']);
+    Route::get('import-profiles', [AttendanceController::class, 'profiles']);
+    Route::post('import-profiles', [AttendanceController::class, 'storeProfile']);
+    Route::put('import-profiles/{profile}', [AttendanceController::class, 'updateProfile']);
 });

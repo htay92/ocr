@@ -101,7 +101,7 @@ class ReceiptCorrector
             $document->id,
         ));
 
-        $document->validationResults()->whereNull('ocr_run_id')->delete();
+        $document->validationResults()->whereNull('ocr_run_id')->whereNull('attendance_sheet_id')->delete();
         foreach ($results as $result) {
             if ($result->level !== RuleResult::SKIPPED) {
                 $document->validationResults()->create([

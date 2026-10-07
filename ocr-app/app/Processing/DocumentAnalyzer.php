@@ -65,7 +65,7 @@ class DocumentAnalyzer
     public function apply(Document $document, Analysis $analysis, string $status, array $attributes = []): void
     {
         // A new reading replaces earlier corrections and their checks.
-        $document->validationResults()->whereNull('ocr_run_id')->delete();
+        $document->validationResults()->whereNull('ocr_run_id')->whereNull('attendance_sheet_id')->delete();
 
         if ($analysis->extracted !== null) {
             Receipt::saveExtracted($document, $analysis->extracted);

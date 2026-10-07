@@ -91,7 +91,7 @@ class DocumentController extends Controller
     {
         Gate::authorize('view', $document);
 
-        $document->load(['selectedRun', 'receipt.taxes', 'receipt.lines']);
+        $document->load(['selectedRun', 'receipt.taxes', 'receipt.lines', 'attendanceSheets.records', 'attendanceSheets.checks']);
         $checks = $document->checks()->get();
 
         return view('documents.show', [

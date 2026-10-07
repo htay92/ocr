@@ -63,9 +63,8 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
             $document->update(['route' => $route]);
 
             match ($route) {
-                Document::ROUTE_SPREADSHEET => $document->transitionTo(Document::FAILED, [
-                    'error_message' => __('Attendance import (CSV/Excel) arrives in milestone 6.'),
-                ]),
+                // CSV / Excel are attendance exports: the user imports them with a profile (SC-06).
+                Document::ROUTE_SPREADSHEET => $document->transitionTo(Document::EXTRACTED, ['type' => 'attendance']),
                 Document::ROUTE_PDF_TEXT => $this->readTextLayer($document, $pdfText->extract($path) ?? ''),
                 Document::ROUTE_OCR => $this->runOcr($document, $path, $ocr, $rasterizer),
             };

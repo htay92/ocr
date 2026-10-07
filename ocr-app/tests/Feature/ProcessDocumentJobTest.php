@@ -162,7 +162,7 @@ it('OCRs every page of a scanned PDF and merges them into one run', function () 
     Http::assertSentCount(2);
 })->skip(fn () => ! hasPoppler(), 'poppler-utils not installed');
 
-it('leaves spreadsheets for the attendance importer', function () {
+it('marks spreadsheets as attendance files to import with a profile', function () {
     Http::fake();
     $csv = tempnam(sys_get_temp_dir(), 'csv');
     file_put_contents($csv, "日付,勤務区分\n10/1,出勤\n");
@@ -171,9 +171,9 @@ it('leaves spreadsheets for the attendance importer', function () {
     ProcessDocumentJob::dispatchSync($document);
 
     expect($document->fresh())
-        ->status->toBe('failed')
+        ->status->toBe('extracted')
         ->route->toBe('spreadsheet')
-        ->error_message->toContain('milestone 6');
+        ->type->toBe('attendance');
     Http::assertNothingSent();
 });
 
