@@ -19,10 +19,10 @@ class ConfidenceHighEnough extends Rule
         $minimum = (float) config('ocr.confidence_min', 0.80);
 
         if ($confidence === null) {
-            return $this->skip('No OCR confidence');
+            return $this->skip(__('No OCR confidence'));
         }
 
-        $message = 'Average OCR confidence '.number_format($confidence, 2).' (minimum '.number_format($minimum, 2).')';
+        $message = __('Average OCR confidence :confidence (minimum :min)', ['confidence' => number_format($confidence, 2), 'min' => number_format($minimum, 2)]);
 
         return $confidence >= $minimum ? $this->pass($message) : $this->fail(RuleResult::WARNING, $message);
     }

@@ -1,2 +1,2 @@
 @props(['status'])
-<span {{ $attributes->class(['badge', $status]) }}>{{ str_replace('_', ' ', $status) }}</span>
+<span {{ $attributes->class(['badge', $status]) }}>{{ \App\Support\Labels::status($status) }}</span>

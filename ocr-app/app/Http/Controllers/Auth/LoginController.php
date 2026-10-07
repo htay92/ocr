@@ -28,7 +28,7 @@ class LoginController extends Controller
         ]);
 
         if (! Auth::attempt($credentials, $request->boolean('remember'))) {
-            throw ValidationException::withMessages(['email' => 'The email or password is incorrect.']);
+            throw ValidationException::withMessages(['email' => __('The email or password is incorrect.')]);
         }
 
         $request->session()->regenerate();

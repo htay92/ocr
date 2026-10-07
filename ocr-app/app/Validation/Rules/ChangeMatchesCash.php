@@ -18,11 +18,13 @@ class ChangeMatchesCash extends Rule
         [$cash, $change, $total] = [$context->document->get('cash_received'), $context->document->get('change'), $context->document->get('total')];
 
         if ($cash === null || $change === null || $total === null) {
-            return $this->skip('No cash and change');
+            return $this->skip(__('No cash and change'));
         }
 
         return $cash - $total === $change
-            ? $this->pass(self::yen($cash).' − '.self::yen($total).' = change '.self::yen($change))
-            : $this->fail(RuleResult::WARNING, self::yen($cash).' − '.self::yen($total).' = '.self::yen($cash - $total).', change is '.self::yen($change));
+            ? $this->pass(__('Cash :cash − total :total = change :change', ['cash' => self::yen($cash), 'total' => self::yen($total), 'change' => self::yen($change)]))
+            : $this->fail(RuleResult::WARNING, __('Cash :cash − total :total = :diff, but the change is :change', [
+                'cash' => self::yen($cash), 'total' => self::yen($total), 'diff' => self::yen($cash - $total), 'change' => self::yen($change),
+            ]));
     }
 }

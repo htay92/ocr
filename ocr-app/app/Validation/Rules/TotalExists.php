@@ -18,7 +18,7 @@ class TotalExists extends Rule
         $total = $context->document->get('total');
 
         return $total !== null && $total > 0
-            ? $this->pass('Total '.self::yen($total))
-            : $this->fail(RuleResult::CRITICAL, $total === null ? 'Total not found' : 'Total is '.self::yen($total));
+            ? $this->pass(__('Total :amount', ['amount' => self::yen($total)]))
+            : $this->fail(RuleResult::CRITICAL, $total === null ? __('Total not found') : __('Total is :amount', ['amount' => self::yen($total)]));
     }
 }

@@ -14,11 +14,38 @@ beforeEach(function () {
     $this->actingAs($this->user);
 });
 
-it('shows the upload screen with camera input', function () {
+it('shows the upload screen with camera input and photo shrinking', function () {
     $this->get('/documents/upload')
         ->assertOk()
         ->assertSee('capture="environment"', false)
-        ->assertSee('name="files[]" multiple', false);
+        ->assertSee('name="files[]" multiple', false)
+        ->assertSee('id="shrink" checked', false)
+        ->assertDontSee('Open on your phone');                            // PHONE_URL not set
+});
+
+it('shows the phone address as a QR code on this computer only', function () {
+    config(['ocr.phone_url' => 'http://192.168.11.3:8080']);
+
+    $this->get('http://localhost/documents/upload')
+        ->assertSee('Open on your phone')
+        ->assertSee('http://192.168.11.3:8080')
+        ->assertSee('<svg', false);
+
+    // Opened on the phone itself: no QR code.
+    $this->get('http://192.168.11.3/documents/upload')->assertDontSee('Open on your phone');
+});
+
+it('answers an upload from the page script with JSON', function () {
+    Queue::fake();
+
+    $this->postJson('/documents', ['files' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')]])
+        ->assertOk()
+        ->assertJson(['redirect' => route('documents.index'), 'count' => 2]);
+
+    $this->get('/documents')->assertSee('2 files uploaded; they are being processed.');
+    $this->postJson('/documents', ['files' => [UploadedFile::fake()->create('x.exe', 1, 'application/x-msdownload')]])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'E-UPLOAD-01');
 });
 
 it('uploads several files from the browser', function () {
@@ -132,12 +159,13 @@ it('shows extracted fields, tax rows, line items and checks', function () {
 
     $this->get("/documents/{$document->id}")
         ->assertOk()
-        ->assertSee('請求書 (invoice)')
+        ->assertSee('Invoice')
         ->assertSeeInOrder(['V-02', 'Issue date not found', 'V-05'])   // critical first
-        ->assertSee(['株式会社○○', '¥1,001,404', '¥102,916', '外税 (tax excluded)', 'T1234567890123'])
-        ->assertSee('missing')                                            // invoice number and date are required on invoices
-        ->assertSeeInOrder(['10%', '¥1,000,000', '¥100,000', '8% (軽減)', '¥4,000', '¥320'])
+        ->assertSee(['株式会社○○', '¥1,001,404', '¥102,916', 'Tax excluded', 'T1234567890123'])
+        ->assertSee('Missing')                                            // invoice number and date are required on invoices
+        ->assertSeeInOrder(['10%', '¥1,000,000', '¥100,000', '8% (reduced)', '¥4,000', '¥320'])
+        ->assertSee('Tax and total agree')                                // rule title
         ->assertSee('商品A');
 
-    $this->get('/documents')->assertSee(['株式会社○○', '請求書', '¥1,001,404']);
+    $this->get('/documents')->assertSee(['株式会社○○', 'Invoice', '¥1,001,404']);
 });

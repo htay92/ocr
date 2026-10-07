@@ -39,18 +39,20 @@ class LinesMatchSubtotal extends Rule
         }
 
         if ($lines === [] || $targets === []) {
-            return $this->skip('No line items');
+            return $this->skip(__('No line items'));
         }
 
         $sum = array_sum(array_map(fn (array $line) => $line['amount'] + $line['discount'], $lines));
         foreach ($targets as $label => $target) {
             if ($sum === $target) {
-                return $this->pass(count($lines).' lines add up to the '.$label.' '.self::yen($target));
+                return $this->pass(__(':count lines add up to the :target :amount', ['count' => count($lines), 'target' => __($label), 'amount' => self::yen($target)]));
             }
         }
 
         $label = array_key_first($targets);
 
-        return $this->fail(RuleResult::CRITICAL, count($lines).' lines add up to '.self::yen($sum).', '.$label.' is '.self::yen($targets[$label]));
+        return $this->fail(RuleResult::CRITICAL, __(':count lines add up to :sum, but the :target is :amount', [
+            'count' => count($lines), 'sum' => self::yen($sum), 'target' => __($label), 'amount' => self::yen($targets[$label]),
+        ]));
     }
 }

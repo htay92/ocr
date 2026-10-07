@@ -32,6 +32,10 @@ return [
     // V-09: lines below this average confidence are flagged (spec 3.5, 3.6).
     'confidence_min' => (float) env('OCR_CONFIDENCE_MIN', 0.80),
 
+    // Address of this app on the home Wi-Fi (http://<Mac IP>:8080), shown as a QR code
+    // on the upload page so a phone can open it. The IP can change after reconnecting.
+    'phone_url' => env('PHONE_URL'),
+
     // Upload limit per file in MB (spec 3.6, FR-01).
     'upload' => [
         'max_mb' => (int) env('UPLOAD_MAX_MB', 20),

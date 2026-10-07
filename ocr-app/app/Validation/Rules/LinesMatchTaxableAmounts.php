@@ -17,7 +17,7 @@ class LinesMatchTaxableAmounts extends Rule
     {
         $doc = $context->document;
         if ($doc->lines === [] || $doc->taxes === []) {
-            return $this->skip('No line items or tax breakdown');
+            return $this->skip(__('No line items or tax breakdown'));
         }
 
         foreach ($doc->taxes as $row) {
@@ -28,10 +28,12 @@ class LinesMatchTaxableAmounts extends Rule
                 }
             }
             if (abs($sum - $row['taxable_amount']) > 1) {
-                return $this->fail(RuleResult::WARNING, "{$row['tax_rate']}% lines add up to ".self::yen($sum).', taxable amount is '.self::yen($row['taxable_amount']));
+                return $this->fail(RuleResult::WARNING, __(':rate% lines add up to :sum, but the taxable amount is :taxable', [
+                    'rate' => $row['tax_rate'], 'sum' => self::yen($sum), 'taxable' => self::yen($row['taxable_amount']),
+                ]));
             }
         }
 
-        return $this->pass('Lines add up per tax rate');
+        return $this->pass(__('Lines add up per tax rate'));
     }
 }

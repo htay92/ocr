@@ -2,7 +2,15 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Middleware\SetLocale;
 use Illuminate\Support\Facades\Route;
+
+// 日本語 / English switch, also on the login page.
+Route::get('locale/{locale}', function (string $locale) {
+    session(['locale' => $locale]);
+
+    return back();
+})->whereIn('locale', SetLocale::LOCALES)->name('locale');
 
 // SC-01 Login
 Route::middleware('guest')->group(function () {

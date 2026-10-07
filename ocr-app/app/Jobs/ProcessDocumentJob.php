@@ -61,7 +61,7 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
 
             match ($route) {
                 Document::ROUTE_SPREADSHEET => $document->transitionTo(Document::FAILED, [
-                    'error_message' => 'Attendance import (CSV/Excel) arrives in milestone 6.',
+                    'error_message' => __('Attendance import (CSV/Excel) arrives in milestone 6.'),
                 ]),
                 Document::ROUTE_PDF_TEXT => $this->readTextLayer($document, $pdfText->extract($path) ?? ''),
                 Document::ROUTE_OCR => $this->runOcr($document, $path, $ocr, $rasterizer),
@@ -153,7 +153,7 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
 
             $code = $lastError?->errorCode === 'invalid_image' ? 'invalid_image' : OcrException::UNREACHABLE;
             $document->transitionTo(Document::FAILED, [
-                'error_message' => "{$code}: ".($lastError?->getMessage() ?? 'no OCR engine is enabled'),
+                'error_message' => "{$code}: ".($lastError?->getMessage() ?? __('no OCR engine is enabled')),
             ]);
         } finally {
             if ($pages !== [$path]) {
@@ -191,7 +191,10 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
     private function needsReview(Document $document, Analysis $analysis): void
     {
         $this->analyzer->apply($document, $analysis, Document::NEEDS_REVIEW, [
-            'error_message' => 'E-OCR-02: critical checks failed ('.implode(', ', $analysis->criticalCodes())."); best result from {$analysis->run->engine}",
+            'error_message' => 'E-OCR-02: '.__('critical checks failed (:rules); best result from :engine', [
+                'rules' => implode(', ', $analysis->criticalCodes()),
+                'engine' => $analysis->run->engine,
+            ]),
         ]);
     }
 }

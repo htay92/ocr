@@ -20,7 +20,7 @@ class NotDuplicate extends Rule
         [$vendor, $date, $total] = [$doc->get('vendor_name'), $doc->get('issue_date'), $doc->get('total')];
 
         if ($vendor === null || $date === null || $total === null) {
-            return $this->skip('Vendor, date or total missing');
+            return $this->skip(__('Vendor, date or total missing'));
         }
 
         $duplicate = Receipt::query()
@@ -31,7 +31,7 @@ class NotDuplicate extends Rule
             ->value('document_id');
 
         return $duplicate === null
-            ? $this->pass('No duplicate')
-            : $this->fail(RuleResult::WARNING, "Same vendor, date and total as document #{$duplicate}");
+            ? $this->pass(__('No duplicate'))
+            : $this->fail(RuleResult::WARNING, __('Same vendor, date and total as document #:id', ['id' => $duplicate]));
     }
 }

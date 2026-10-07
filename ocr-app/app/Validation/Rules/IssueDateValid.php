@@ -18,20 +18,20 @@ class IssueDateValid extends Rule
     {
         $value = $context->document->get('issue_date');
         if ($value === null) {
-            return $this->fail(RuleResult::CRITICAL, 'Issue date not found');
+            return $this->fail(RuleResult::CRITICAL, __('Issue date not found'));
         }
 
         $date = Carbon::createFromFormat('!Y-m-d', $value);
         if ($date === false || $date->format('Y-m-d') !== $value) {
-            return $this->fail(RuleResult::CRITICAL, "Issue date {$value} is not a valid date");
+            return $this->fail(RuleResult::CRITICAL, __('Issue date :date is not a valid date', ['date' => $value]));
         }
         if ($date->isAfter(today())) {
-            return $this->fail(RuleResult::CRITICAL, "Issue date {$value} is in the future");
+            return $this->fail(RuleResult::CRITICAL, __('Issue date :date is in the future', ['date' => $value]));
         }
         if ($date->isBefore(today()->subYears(10))) {
-            return $this->fail(RuleResult::CRITICAL, "Issue date {$value} is older than 10 years");
+            return $this->fail(RuleResult::CRITICAL, __('Issue date :date is older than 10 years', ['date' => $value]));
         }
 
-        return $this->pass("Issue date {$value}");
+        return $this->pass(__('Issue date :date', ['date' => $value]));
     }
 }

@@ -17,7 +17,7 @@ class TaxMatchesRate extends Rule
     {
         $doc = $context->document;
         if ($doc->taxes === []) {
-            return $this->skip('No tax breakdown');
+            return $this->skip(__('No tax breakdown'));
         }
 
         foreach ($doc->taxes as $row) {
@@ -26,10 +26,12 @@ class TaxMatchesRate extends Rule
                 $matches = $matches || abs($row['tax_amount'] - self::taxOn($row['taxable_amount'], $row['tax_rate'], $mode)) <= 1;
             }
             if (! $matches) {
-                return $this->fail(RuleResult::WARNING, "{$row['tax_rate']}% tax ".self::yen($row['tax_amount']).' does not match taxable '.self::yen($row['taxable_amount']));
+                return $this->fail(RuleResult::WARNING, __(':rate% tax :tax does not match the taxable amount :taxable', [
+                    'rate' => $row['tax_rate'], 'tax' => self::yen($row['tax_amount']), 'taxable' => self::yen($row['taxable_amount']),
+                ]));
             }
         }
 
-        return $this->pass('Tax amounts match their rates');
+        return $this->pass(__('Tax amounts match their rates'));
     }
 }

@@ -22,7 +22,7 @@ class TaxesMatchTotal extends Rule
         $total = $doc->get('total');
 
         if ($doc->taxes === [] || $total === null) {
-            return $this->skip('No tax breakdown');
+            return $this->skip(__('No tax breakdown'));
         }
 
         $taxable = array_sum(array_column($doc->taxes, 'taxable_amount'));
@@ -31,23 +31,28 @@ class TaxesMatchTotal extends Rule
         // Without a printed subtotal, the tax-exclusive taxable amounts are the subtotal.
         $subtotal = $doc->get('subtotal') ?? $taxable;
 
-        $checks = [];
+        $failures = [];
         foreach (self::modes($doc->get('tax_mode')) as $mode) {
             if ($mode === 'inclusive') {
-                $checks[] = [$taxable === $total, 'Taxable amounts '.self::yen($taxable).' = total '.self::yen($total)];
+                $values = ['taxable' => self::yen($taxable), 'total' => self::yen($total)];
+                if ($taxable === $total) {
+                    return $this->pass(__('Taxable amounts :taxable = total :total', $values));
+                }
+                $failures[] = __('Taxable amounts :taxable ≠ total :total', $values);
             } else {
                 $sum = $subtotal + $tax - $withholding;
-                $formula = self::yen($subtotal).' + tax '.self::yen($tax).($withholding ? ' − withholding '.self::yen($withholding) : '');
-                $checks[] = [$sum === $total, $formula.' = '.self::yen($sum).', total '.self::yen($total)];
+                $values = ['subtotal' => self::yen($subtotal), 'tax' => self::yen($tax), 'withholding' => self::yen($withholding), 'sum' => self::yen($sum), 'total' => self::yen($total)];
+                if ($sum === $total) {
+                    return $this->pass($withholding
+                        ? __('Subtotal :subtotal + tax :tax − withholding :withholding = total :total', $values)
+                        : __('Subtotal :subtotal + tax :tax = total :total', $values));
+                }
+                $failures[] = $withholding
+                    ? __('Subtotal :subtotal + tax :tax − withholding :withholding = :sum ≠ total :total', $values)
+                    : __('Subtotal :subtotal + tax :tax = :sum ≠ total :total', $values);
             }
         }
 
-        foreach ($checks as [$ok, $message]) {
-            if ($ok) {
-                return $this->pass($message);
-            }
-        }
-
-        return $this->fail(RuleResult::CRITICAL, str_replace(' = total', ' ≠ total', $checks[0][1]));
+        return $this->fail(RuleResult::CRITICAL, $failures[0]);
     }
 }

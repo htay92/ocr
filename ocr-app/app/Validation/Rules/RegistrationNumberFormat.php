@@ -24,12 +24,12 @@ class RegistrationNumberFormat extends Rule
 
         if ($number === null) {
             return $context->type === DocumentClassifier::INVOICE
-                ? $this->fail($level, 'Registration number (T + 13 digits) not found; required on invoices')
-                : $this->skip('No registration number');
+                ? $this->fail($level, __('Registration number (T + 13 digits) not found; required on invoices'))
+                : $this->skip(__('No registration number'));
         }
 
         return preg_match('/^T\d{13}$/', $number)
-            ? $this->pass("Registration number {$number}")
-            : $this->fail($level, "Registration number {$number} is not T + 13 digits");
+            ? $this->pass(__('Registration number :number', ['number' => $number]))
+            : $this->fail($level, __('Registration number :number is not T + 13 digits', ['number' => $number]));
     }
 }

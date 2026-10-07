@@ -62,6 +62,6 @@ class StoreDocumentsRequest extends FormRequest
 
     public function attributes(): array
     {
-        return ['files.*' => 'file'];
+        return ['files.*' => __('file')];
     }
 }
