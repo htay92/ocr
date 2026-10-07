@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocr-contract",
+  "title": "OCR container contract (spec 3.2)",
+  "$defs": {
+    "point": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0},
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "line": {
+      "type": "object",
+      "required": ["text", "confidence", "bbox"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "bbox": {"type": "array", "items": {"$ref": "#/$defs/point"}, "minItems": 4, "maxItems": 4}
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["engine", "engine_version", "elapsed_ms", "image", "lines", "preprocessed_image"],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {"type": "string", "minLength": 1},
+        "engine_version": {"type": "string"},
+        "elapsed_ms": {"type": "integer", "minimum": 0},
+        "image": {
+          "type": "object",
+          "required": ["width", "height", "rotation"],
+          "additionalProperties": false,
+          "properties": {
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1},
+            "rotation": {"enum": [0, 90, 180, 270]}
+          }
+        },
+        "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}},
+        "preprocessed_image": {"type": ["string", "null"]}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"enum": ["invalid_image", "too_large", "engine_error", "not_ready"]},
+        "message": {"type": "string"}
+      }
+    },
+    "health": {
+      "type": "object",
+      "required": ["engine", "version", "ready"],
+      "properties": {
+        "engine": {"type": "string"},
+        "version": {"type": "string"},
+        "ready": {"type": "boolean"}
+      }
+    }
+  }
+}

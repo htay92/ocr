@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from conftest import assert_schema
 
 
 @pytest.fixture
@@ -26,6 +27,7 @@ def test_health_reports_engine_and_version_when_ready(client):
 
     assert response.status_code == 200
     assert response.json() == {"engine": "paddle", "version": main.VERSION, "ready": True}
+    assert_schema(response.json(), "health")
     assert "PP-OCRv5" in main.VERSION
 
 

@@ -32,5 +32,13 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- Spec 3.6 defaults, so local .env tuning (timeouts, engines) never changes test results. -->
+        <env name="OCR_ENGINE" value="paddle" force="true"/>
+        <env name="OCR_FALLBACK" value="paddle,ndl" force="true"/>
+        <env name="OCR_PADDLE_URL" value="http://ocr-paddle:8000" force="true"/>
+        <env name="OCR_NDL_ENABLED" value="false" force="true"/>
+        <env name="OCR_CLOUD_ENABLED" value="false" force="true"/>
+        <env name="OCR_TIMEOUT" value="60" force="true"/>
+        <env name="OCR_RETRIES" value="3" force="true"/>
     </php>
 </phpunit>

@@ -1,0 +1,50 @@
+<?php
+
+/*
+| OCR engine selection and fallback (spec 3.6).
+|
+| Every engine with driver "http" is a container implementing the OCR contract
+| (spec 3.2), so adding an engine is a new container plus an entry here (NFR-10).
+|
+| Timeouts must nest. Worst case per engine: (1 + retries) x timeout + backoff
+| = 4 x 60 s + 130 s = 370 s; two engines = 740 s. That stays below the worker
+| --timeout (900 s), which stays below REDIS_QUEUE_RETRY_AFTER (960 s).
+*/
+
+return [
+
+    'default' => env('OCR_ENGINE', 'paddle'),
+
+    'fallback' => array_values(array_filter(array_map('trim', explode(',', (string) env('OCR_FALLBACK', 'paddle,ndl'))))),
+
+    // Seconds per OCR call.
+    'timeout' => (int) env('OCR_TIMEOUT', 60),
+
+    // Retries per engine on 500 / 503 / connection errors, waiting `backoff` seconds before each.
+    'retries' => (int) env('OCR_RETRIES', 3),
+    'backoff' => [10, 30, 90],
+
+    'engines' => [
+
+        'paddle' => [
+            'driver' => 'http',
+            'url' => env('OCR_PADDLE_URL', 'http://ocr-paddle:8000'),
+            'enabled' => env('OCR_PADDLE_ENABLED', true),
+        ],
+
+        // Light fallback engine (NDLOCR-Lite); enable once its container exists.
+        'ndl' => [
+            'driver' => 'http',
+            'url' => env('OCR_NDL_URL', 'http://ocr-ndl:8000'),
+            'enabled' => env('OCR_NDL_ENABLED', false),
+        ],
+
+        // Paid cloud OCR; off unless explicitly enabled (NFR-09).
+        'cloud' => [
+            'driver' => 'cloud',
+            'enabled' => env('OCR_CLOUD_ENABLED', false),
+        ],
+
+    ],
+
+];
