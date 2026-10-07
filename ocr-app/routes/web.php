@@ -51,4 +51,5 @@ Route::middleware('auth')->group(function () {
     Route::post('attendance/templates/sample', [AttendanceTemplateController::class, 'sample'])->name('templates.sample');
     Route::get('attendance/templates/design/{key}', [AttendanceTemplateController::class, 'design'])->name('templates.design');
     Route::post('attendance/templates/design/{key}', [AttendanceTemplateController::class, 'save'])->name('templates.save');
+    Route::delete('attendance/templates/{profile}', [AttendanceTemplateController::class, 'destroy'])->name('templates.destroy');
 });

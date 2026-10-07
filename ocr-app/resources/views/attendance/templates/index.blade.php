@@ -17,7 +17,10 @@
                 </div>
                 <p class="small muted">{{ implode(' · ', array_column($template->columns, 'title')) }}</p>
                 <p class="small muted">{{ trans_choice('{0} Not used yet|{1} Used for 1 sheet|[2,*] Used for :count sheets', $profile->attendance_sheets_count) }}</p>
-                <a class="button secondary small" href="{{ route('templates.create', ['template' => $profile->id]) }}">{{ __('Edit with a sample file') }}</a>
+                <div class="row" style="align-items:center">
+                    <a class="button secondary small" href="{{ route('templates.create', ['template' => $profile->id]) }}" style="flex:0 0 auto">{{ __('Edit with a sample file') }}</a>
+                    @include('attendance.templates._delete', ['profile' => $profile])
+                </div>
             </li>
         @endforeach
     </ul>

@@ -342,5 +342,12 @@
     "up to :max MB": ":max MBまで",
     "{0} Not used yet|{1} Used for 1 sheet|[2,*] Used for :count sheets": "{0} 未使用|{1} 1件の取り込みで使用|[2,*] :count件の取り込みで使用",
     "— (just show it)": "—（表示のみ）",
-    "— none (day off / blank)": "—（休み・空欄）"
+    "— none (day off / blank)": "—（休み・空欄）",
+    "Delete": "削除",
+    "Template \":name\" deleted.": "テンプレート「:name」を削除しました。",
+    "Delete the template \":name\"? Attendance already imported with it stays as it is.": "テンプレート「:name」を削除しますか？ このテンプレートで取り込んだ勤怠データはそのまま残ります。",
+    "No template fitted this file, so the new template \":name\" was made from it and saved. Check the reading below.": "このファイルに合うテンプレートがなかったため、ファイルから新しいテンプレート「:name」を作成して自動保存しました。下の読み取り結果を確認してください。",
+    "Check or edit the template": "テンプレートを確認・編集",
+    "Delete the template \":name\" and set it up by hand?": "テンプレート「:name」を削除して、手動で設定しますか？",
+    "Delete it and set up by hand": "削除して手動で作成"
 }

@@ -10,6 +10,22 @@
         <div class="flash error" role="alert">{{ $errors->first() }}</div>
     @endif
 
+    @if ($created)
+        <div class="flash info stack" role="status">
+            <span>{{ __('No template fitted this file, so the new template ":name" was made from it and saved. Check the reading below.', ['name' => $created->name]) }}</span>
+            <div class="row" style="align-items:center">
+                <a class="button secondary small" href="{{ route('templates.design', ['key' => $key, 'template' => $created->id]) }}" style="flex:0 0 auto">{{ __('Check or edit the template') }}</a>
+                <form method="POST" action="{{ route('templates.destroy', $created) }}" style="flex:0 0 auto"
+                      onsubmit="return confirm(@js(__('Delete the template ":name" and set it up by hand?', ['name' => $created->name])))">
+                    @csrf
+                    @method('DELETE')
+                    <input type="hidden" name="key" value="{{ $key }}">
+                    <button class="linkbutton" type="submit">{{ __('Delete it and set up by hand') }}</button>
+                </form>
+            </div>
+        </div>
+    @endif
+
     <form method="GET" class="row card" style="margin-bottom:12px">
         <div>
             <label for="profile">{{ __('Template') }}</label>

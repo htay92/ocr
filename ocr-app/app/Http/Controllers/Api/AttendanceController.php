@@ -11,6 +11,7 @@ use App\Models\ImportProfile;
 use App\Processing\ProcessingException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
 
 class AttendanceController extends Controller
@@ -66,6 +67,14 @@ class AttendanceController extends Controller
         $profile->update($request->validate(self::templateRules($profile)));
 
         return response()->json(['data' => $profile]);
+    }
+
+    /** Imported sheets stay; they keep their own copy of the template's columns. */
+    public function destroyProfile(ImportProfile $profile): Response
+    {
+        $profile->delete();
+
+        return response()->noContent();
     }
 
     /**

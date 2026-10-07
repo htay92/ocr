@@ -60,7 +60,7 @@ class AttendanceTemplateController extends Controller
         $existing = $request->query('template') ? ImportProfile::find($request->query('template')) : null;
         $settings = $existing ? $this->merge($analysis['settings'], $existing) : $analysis['settings'];
 
-        return $this->form($key, $fileName, $analysis, $settings, $existing, $existing?->name ?? $this->suggestName($fileName));
+        return $this->form($key, $fileName, $analysis, $settings, $existing, $existing?->name ?? TemplateDesigner::suggestName($fileName));
     }
 
     public function save(Request $request, string $key, TemplateDesigner $designer, AttendanceImporter $importer): View|RedirectResponse
@@ -102,6 +102,22 @@ class AttendanceTemplateController extends Controller
         $settings = $this->settingsFromForm($request->all(), $analysis['settings']);
 
         return $this->form($key, $fileName, $analysis, $settings, $existing, (string) $request->input('name'), $preview, $error);
+    }
+
+    public function destroy(Request $request, ImportProfile $profile): RedirectResponse
+    {
+        // Imported sheets keep their own copy of the columns; their link to the template is cleared.
+        $profile->delete();
+
+        // From an import preview ("delete and set up by hand"): the setting page for that file.
+        if ($key = $request->input('key')) {
+            $this->files->resolve($request, $key);
+            $request->session()->put('template-return', $key);
+
+            return redirect()->route('templates.design', $key)->with('status', __('Template ":name" deleted.', ['name' => $profile->name]));
+        }
+
+        return redirect()->route('templates.index')->with('status', __('Template ":name" deleted.', ['name' => $profile->name]));
     }
 
     private function form(string $key, string $fileName, array $analysis, array $settings, ?ImportProfile $existing, string $name, $preview = null, ?string $error = null): View
@@ -154,12 +170,5 @@ class AttendanceTemplateController extends Controller
         $suggested['work_types'] = array_merge($suggested['work_types'] ?? [], $saved['work_types'] ?? []);
 
         return $suggested;
-    }
-
-    private function suggestName(string $fileName): string
-    {
-        $name = preg_replace('/^\d{6,8}_|[_（(].*$|【.*?】/u', '', pathinfo($fileName, PATHINFO_FILENAME));
-
-        return trim($name) ?: pathinfo($fileName, PATHINFO_FILENAME);
     }
 }

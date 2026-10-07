@@ -213,6 +213,38 @@ class TemplateDesigner
     }
 
     /**
+     * A template made from a file's own suggestions, ready to save (not saved),
+     * for a file that no saved template fits. Null when no column holds the
+     * date or the day of the month: then the format has to be set up by hand.
+     */
+    public function suggest(string $path, string $fileName): ?ImportProfile
+    {
+        $analysis = $this->analyse($path, $fileName);
+        $profile = $this->fromForm([...$analysis['settings'], 'name' => self::uniqueName(self::suggestName($fileName))], $analysis['kind'], $analysis['anchors']);
+
+        return collect($profile->settings['columns'])->contains(fn ($c) => in_array($c['role'], ['work_date', 'work_day'], true)) ? $profile : null;
+    }
+
+    /** A template name from the file name: "20260126_出勤簿_自動計算.xlsx" → "出勤簿". */
+    public static function suggestName(string $fileName): string
+    {
+        $name = preg_replace('/^\d{6,8}_|[_（(].*$|【.*?】/u', '', pathinfo($fileName, PATHINFO_FILENAME));
+
+        return trim($name) ?: pathinfo($fileName, PATHINFO_FILENAME);
+    }
+
+    /** "出勤簿", or "出勤簿 (2)" when that name is taken. */
+    public static function uniqueName(string $name): string
+    {
+        $name = mb_substr($name, 0, 90);
+        for ($candidate = $name, $n = 2; ImportProfile::where('name', $candidate)->exists(); $n++) {
+            $candidate = "{$name} ({$n})";
+        }
+
+        return $candidate;
+    }
+
+    /**
      * The submitted form → template attributes (an ImportProfile, not saved yet).
      */
     public function fromForm(array $input, string $kind, array $anchors): ImportProfile

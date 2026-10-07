@@ -2,6 +2,7 @@
 
 use App\Models\AttendanceSheet;
 use App\Models\Document;
+use App\Models\ImportProfile;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -82,15 +83,34 @@ it('imports critical findings only after an acknowledgement', function () {
     expect(AttendanceSheet::sole()->checks->firstWhere('rule_code', 'A-05')->level)->toBe('critical');
 });
 
-it('offers to create a template when no template fits the file', function () {
+it('saves a template from the file itself when no template fits', function () {
     $this->actingAs($this->user);
     $rows = kintaiRows();
     $rows[0][2] = '年月日';                                                     // the date column has another title
     $location = $this->post('/attendance/import', ['file' => csvUpload($rows)])->headers->get('Location');
 
     $this->get($location)->assertOk()
+        ->assertSee(['the new template', '山田 花子', '162:00', 'Check or edit the template', 'Delete it and set up by hand']);
+    $created = ImportProfile::latest('id')->first();
+    expect($created->settings['columns'][2])->toMatchArray(['title' => '年月日', 'role' => 'work_date'])
+        ->and(ImportProfile::count())->toBe(3);
+
+    // The next file of this format uses it: no second template.
+    $next = $this->post('/attendance/import', ['file' => csvUpload($rows)])->headers->get('Location');
+    $this->get($next)->assertOk()->assertDontSee('the new template')->assertSee("selected>{$created->name}", false);
+    expect(ImportProfile::count())->toBe(3);
+});
+
+it('offers to create a template by hand when no column holds the date', function () {
+    $this->actingAs($this->user);
+    $rows = kintaiRows();
+    $rows[0][2] = 'Datum';                                                      // a title no suggestion knows
+    $location = $this->post('/attendance/import', ['file' => csvUpload($rows)])->headers->get('Location');
+
+    $this->get($location)->assertOk()
         ->assertSee(['No template fits this file.', 'Create a template from this file'])
         ->assertSee(route('templates.design', basename(parse_url($location, PHP_URL_PATH))), false);
+    expect(ImportProfile::count())->toBe(2);
 });
 
 it('imports a CSV that came in through the normal upload', function () {

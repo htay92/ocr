@@ -24,4 +24,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('import-profiles', [AttendanceController::class, 'profiles']);
     Route::post('import-profiles', [AttendanceController::class, 'storeProfile']);
     Route::put('import-profiles/{profile}', [AttendanceController::class, 'updateProfile']);
+    Route::delete('import-profiles/{profile}', [AttendanceController::class, 'destroyProfile']);
 });

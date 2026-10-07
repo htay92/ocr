@@ -193,6 +193,9 @@
                 </div>
             </div>
         </form>
+        @if ($existing)
+            <div class="danger-zone">@include('attendance.templates._delete', ['profile' => $existing])</div>
+        @endif
     </div>
 
     @if ($error)

@@ -44,14 +44,25 @@ class AttendanceController extends Controller
         return redirect()->route('attendance.preview', ['key' => $this->files->store($request, $request->file('file'))]);
     }
 
-    public function preview(Request $request, string $key, AttendanceImporter $importer): View
+    public function preview(Request $request, string $key, AttendanceImporter $importer, TemplateDesigner $designer): View
     {
         [$path, $name, $document] = $this->files->resolve($request, $key);
         $profile = $request->query('profile') ? ImportProfile::find($request->query('profile')) : null;
 
+        $created = null;
         try {
-            $preview = $importer->preview($path, $name, $profile, $request->query('employee_name'), $request->query('employee_code'));
+            try {
+                $preview = $importer->preview($path, $name, $profile, $request->query('employee_name'), $request->query('employee_code'));
+            } catch (NoTemplateMatches $e) {
+                // A new format: save the template suggested from the file itself and read it with that;
+                // it can be checked, edited or deleted afterwards.
+                $created = $designer->suggest($path, $name) ?? throw $e;
+                $created->save();
+                $request->session()->put('template-return', $key);       // editing it returns to this preview
+                $preview = $importer->preview($path, $name, $created, $request->query('employee_name'), $request->query('employee_code'));
+            }
         } catch (NoTemplateMatches|ProcessingException $e) {
+            $created?->delete();                                     // a suggestion that cannot read the file is not kept
             $request->session()->put('template-return', $key);
 
             return view('attendance.no-template', [
@@ -71,6 +82,7 @@ class AttendanceController extends Controller
             'templates' => $this->templatesFor($name),
             'employeeName' => $request->query('employee_name'),
             'employeeCode' => $request->query('employee_code'),
+            'created' => $created,
         ]);
     }
 
