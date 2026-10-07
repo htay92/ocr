@@ -37,19 +37,31 @@ class StoreDocumentsRequest extends FormRequest
     }
 
     /**
-     * 422 with an application error code (spec 3.6): E-UPLOAD-02 when a file is
-     * too large, otherwise E-UPLOAD-01 (unsupported or missing file).
+     * Adds the application error code (spec 3.6): E-UPLOAD-02 when a file is too
+     * large, otherwise E-UPLOAD-01 (unsupported or missing file). The API gets
+     * 422 JSON with "code"; the upload screen gets the code as the "code" error.
      */
     protected function failedValidation(Validator $validator): void
     {
         $tooLarge = collect($validator->failed())
             ->filter(fn (array $rules, string $field) => str_starts_with($field, 'files.') && isset($rules['Max']))
             ->isNotEmpty();
+        $code = $tooLarge ? 'E-UPLOAD-02' : 'E-UPLOAD-01';
+
+        if (! $this->expectsJson()) {
+            $validator->errors()->add('code', $code);
+            parent::failedValidation($validator);
+        }
 
         throw new HttpResponseException(response()->json([
             'message' => $validator->errors()->first(),
-            'code' => $tooLarge ? 'E-UPLOAD-02' : 'E-UPLOAD-01',
+            'code' => $code,
             'errors' => $validator->errors(),
         ], 422));
+    }
+
+    public function attributes(): array
+    {
+        return ['files.*' => 'file'];
     }
 }

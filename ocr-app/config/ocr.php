@@ -24,6 +24,9 @@ return [
     'retries' => (int) env('OCR_RETRIES', 3),
     'backoff' => [10, 30, 90],
 
+    // V-09: lines below this average confidence are flagged (spec 3.5, 3.6).
+    'confidence_min' => (float) env('OCR_CONFIDENCE_MIN', 0.80),
+
     // Upload limit per file in MB (spec 3.6, FR-01).
     'upload' => [
         'max_mb' => (int) env('UPLOAD_MAX_MB', 20),

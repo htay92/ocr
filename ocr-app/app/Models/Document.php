@@ -72,6 +72,12 @@ class Document extends Model
         ];
     }
 
+    /** Still queued or running; the screens refresh until this is false. */
+    public function isBusy(): bool
+    {
+        return in_array($this->status, [self::PENDING, self::PROCESSING], true);
+    }
+
     public function canTransitionTo(string $status): bool
     {
         return in_array($status, self::TRANSITIONS[$this->status] ?? [], true);
