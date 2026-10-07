@@ -149,5 +149,6 @@
     "Vendor, date or total missing": "発行元・日付・合計のいずれかがありません",
     "No duplicate": "重複なし",
     "Same vendor, date and total as document #:id": "書類 #:id と発行元・日付・合計金額が同じです",
-    "file": "ファイル"
+    "file": "ファイル",
+    "Your session expired. Please log in again.": "セッションの有効期限が切れました。もう一度ログインしてください。"
 }

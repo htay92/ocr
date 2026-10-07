@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
 
 /**
  * SC-01 Login. There is one owner account (spec 1.2); create it with
@@ -15,9 +15,10 @@ use Illuminate\View\View;
  */
 class LoginController extends Controller
 {
-    public function create(): View
+    public function create(): Response
     {
-        return view('auth.login');
+        // Not cached: Back must reload the page with a fresh CSRF token.
+        return response()->view('auth.login')->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     public function store(Request $request): RedirectResponse
