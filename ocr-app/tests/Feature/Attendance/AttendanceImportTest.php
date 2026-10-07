@@ -2,7 +2,6 @@
 
 use App\Models\AttendanceSheet;
 use App\Models\Document;
-use App\Models\ImportProfile;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -83,14 +82,15 @@ it('imports critical findings only after an acknowledgement', function () {
     expect(AttendanceSheet::sole()->checks->firstWhere('rule_code', 'A-05')->level)->toBe('critical');
 });
 
-it('shows file errors with their code', function () {
+it('offers to create a template when no template fits the file', function () {
     $this->actingAs($this->user);
     $rows = kintaiRows();
-    $rows[0][2] = '年月日';
+    $rows[0][2] = '年月日';                                                     // the date column has another title
     $location = $this->post('/attendance/import', ['file' => csvUpload($rows)])->headers->get('Location');
 
-    $this->get($location)->assertRedirect('/attendance/import');
-    $this->get('/attendance/import')->assertSee('E-IMP-02');
+    $this->get($location)->assertOk()
+        ->assertSee(['No template fits this file.', 'Create a template from this file'])
+        ->assertSee(route('templates.design', basename(parse_url($location, PHP_URL_PATH))), false);
 });
 
 it('imports a CSV that came in through the normal upload', function () {
@@ -122,23 +122,6 @@ it('imports the real 勤務データ PDF', function () {
         ->toBe(['employee_name' => 'Htay Hlaing Kyaw', 'scheduled_minutes' => 10080, 'paid_leave_remaining_days' => '26.0']);
 })->skip(fn () => ! hasPoppler() || ! is_file(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf')), 'needs poppler and the sample PDF');
 
-it('edits import profiles', function () {
-    $this->actingAs($this->user);
-
-    $this->post('/attendance/profiles', [
-        'name' => 'other-system', 'encoding' => 'SJIS-win', 'delimiter' => 'tab', 'header_row' => 2,
-        'column_map' => ['work_date' => '年月日', 'worked_minutes' => '8', 'memo' => ''],
-    ])->assertRedirect('/attendance/profiles');
-
-    $profile = ImportProfile::firstWhere('name', 'other-system');
-    expect($profile->delimiter)->toBe("\t")
-        ->and($profile->column_map)->toBe(['work_date' => '年月日', 'worked_minutes' => '8']);
-
-    $this->put("/attendance/profiles/{$profile->id}", ['name' => 'other-system', 'encoding' => 'auto', 'delimiter' => ',', 'header_row' => 1, 'column_map' => ['work_date' => '']])
-        ->assertSessionHasErrors('column_map.work_date');
-    $this->get('/attendance/profiles')->assertSee(['kintai-standard', 'other-system']);
-});
-
 it('imports through the API, with a dry run first', function () {
     Sanctum::actingAs($this->user);
 
@@ -153,5 +136,5 @@ it('imports through the API, with a dry run first', function () {
         ->assertCreated()
         ->assertJsonPath('sheets.0.worked_minutes', 9720);
     $this->postJson('/api/attendance/import', ['file' => csvUpload(kintaiRows())])->assertUnprocessable()->assertJsonValidationErrors('replace');
-    $this->getJson('/api/import-profiles')->assertJsonPath('data.0.name', 'kintai-standard');
+    $this->getJson('/api/import-profiles')->assertJsonFragment(['name' => 'kintai-standard'])->assertJsonFragment(['name' => '勤務データ PDF']);
 });

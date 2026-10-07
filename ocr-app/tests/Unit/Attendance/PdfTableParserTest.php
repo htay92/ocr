@@ -1,10 +1,10 @@
 <?php
 
-use App\Attendance\Parsers\KintaiPdfParser;
+use App\Attendance\Parsers\PdfTableParser;
 use App\Processing\ProcessingException;
 
 it('reads Tei\'s real 勤務データ PDF (an empty month)', function () {
-    $sheet = (new KintaiPdfParser)->parse(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf'));
+    $sheet = (new PdfTableParser)->parse(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf'));
 
     expect($sheet->employeeName)->toBe('Htay Hlaing Kyaw')
         ->and([$sheet->periodStart, $sheet->periodEnd])->toBe(['2026-10-01', '2026-10-31'])
@@ -21,7 +21,7 @@ it('reads Tei\'s real 勤務データ PDF (an empty month)', function () {
 })->skip(fn () => ! hasPoppler() || ! is_file(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf')), 'needs poppler and the sample PDF');
 
 it('reads a filled month from word positions', function () {
-    $sheet = (new KintaiPdfParser)->parseWords(kintaiPdfWords());
+    $sheet = (new PdfTableParser)->parseWords(kintaiPdfWords());
 
     $first = $sheet->records[0];
     expect($sheet->employeeName)->toBe('山田 花子')
@@ -36,5 +36,5 @@ it('reads a filled month from word positions', function () {
 });
 
 it('rejects a PDF that is not a 勤務データ sheet', function () {
-    (new KintaiPdfParser)->parseWords([['請求書', 50, 30, 90, 38]]);
+    (new PdfTableParser)->parseWords([['請求書', 50, 30, 90, 38]]);
 })->throws(ProcessingException::class);

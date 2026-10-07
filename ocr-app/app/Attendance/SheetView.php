@@ -8,7 +8,9 @@ use App\Models\AttendanceRecord;
 use App\Models\AttendanceSheet;
 
 /**
- * One shape for showing a sheet, before saving (preview) and after (document page).
+ * One shape for showing a sheet, before saving (preview) and after (document
+ * page): the format's own columns and summary items, plus the standard totals
+ * the format has columns for.
  */
 final class SheetView
 {
@@ -21,6 +23,8 @@ final class SheetView
             'period_end' => $sheet->periodEnd,
             'summary' => $sheet->summary,
             'computed' => array_values(array_diff(array_keys($sheet->summary), $sheet->summarySource)),
+            'summary_values' => $sheet->summaryValues,
+            'columns' => self::displayColumns($sheet->columns),
             'warnings' => $sheet->warnings,
             'records' => array_map(fn (ParsedRecord $r) => $r->toArray(), $sheet->records),
         ];
@@ -41,6 +45,8 @@ final class SheetView
             'period_end' => $sheet->period_end->format('Y-m-d'),
             'summary' => $summary,
             'computed' => array_values(array_diff(array_keys($summary), $sheet->summary_source ?? [])),
+            'summary_values' => $sheet->summary_values ?? [],
+            'columns' => self::displayColumns($sheet->columns ?? []),
             'warnings' => [],
             'records' => $sheet->records->map(fn (AttendanceRecord $r) => [
                 ...$r->only(['day_type', 'holiday_name', 'work_type', 'break_minutes', 'worked_minutes', 'overtime_minutes',
@@ -48,7 +54,22 @@ final class SheetView
                 'work_date' => $r->work_date->format('Y-m-d'),
                 'start_time' => $r->start_time ? substr($r->start_time, 0, 5) : null,
                 'end_time' => $r->end_time ? substr($r->end_time, 0, 5) : null,
+                'values' => $r->values,
             ])->all(),
         ];
+    }
+
+    /**
+     * Columns of the month table: the format's own, except the date (shown as the
+     * first column with weekday and holiday) and the employee. Sheets imported
+     * before templates had columns get the standard set.
+     */
+    private static function displayColumns(array $columns): array
+    {
+        if ($columns === []) {
+            $columns = Template::kintaiPdfSettings()['columns'];
+        }
+
+        return array_values(array_filter($columns, fn ($c) => ! in_array($c['role'] ?? null, ['work_date', 'work_day', 'employee_name', 'employee_code'], true)));
     }
 }

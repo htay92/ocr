@@ -1,4 +1,9 @@
-{{-- One attendance sheet (SheetView array): summary and the month, day types computed from the calendar. --}}
+{{--
+    One attendance sheet (SheetView array) with the format's own columns: the date
+    (with weekday and holiday, computed from the calendar) and then each column
+    under its title from the file. Summary: the file's own items and the standard
+    totals the format has columns for.
+--}}
 @php
     use App\Attendance\Support\TimeValue;
     $s = $sheet['summary'];
@@ -6,22 +11,46 @@
     $tag = fn (string $key) => in_array($key, $computed, true) ? '<span class="tag" title="'.e(__('Not in the file: computed from the daily rows')).'">'.e(__('computed')).'</span>' : '';
     $weekdays = ['日', '月', '火', '水', '木', '金', '土'];
     $limit = $limit ?? null;
+    $legacy = [
+        'start_time' => 'start_time', 'end_time' => 'end_time', 'break_minutes' => 'break_minutes', 'worked_minutes' => 'worked_minutes',
+        'overtime_minutes' => 'overtime_minutes', 'late_night_minutes' => 'late_night_minutes', 'legal_holiday_minutes' => 'legal_holiday_minutes',
+        'legal_holiday_late_night_minutes' => 'legal_holiday_late_night_minutes', 'work_type' => 'work_type', 'memo' => 'memo', 'confirmed' => 'confirmed',
+    ];
+    // A cell: the stored value by column key; sheets imported before templates only have the standard fields.
+    $cell = function (array $r, array $c) use ($legacy) {
+        $value = array_key_exists('values', $r) && $r['values'] !== null ? ($r['values'][$c['key']] ?? null) : ($r[$legacy[$c['role'] ?? ''] ?? ''] ?? null);
+
+        return match ($c['type']) {
+            'duration' => $value === null || $value === 0 ? '' : TimeValue::format((int) $value),
+            'mark' => $value ? '✓' : '',
+            'number' => $value === null ? '' : rtrim(rtrim(number_format((float) $value, 2), '0'), '.'),
+            default => (string) ($value ?? ''),
+        };
+    };
+    $standard = ['scheduled' => '所定時間', 'worked' => '労働時間', 'overtime' => '時間外', 'late_night' => '深夜', 'legal_holiday' => '法定休日', 'legal_holiday_late_night' => '法定休日深夜'];
+    $fileItems = collect($sheet['summary_values'] ?? [])->filter(fn ($i) => ($i['role'] ?? null) === null || str_starts_with($i['role'] ?? '', 'count:') === false && ! in_array($i['role'], array_map(fn ($k) => "{$k}_minutes", array_keys($standard)), true) && ! in_array($i['role'], ['scheduled_days', 'worked_days', 'paid_leave_taken_days', 'paid_leave_remaining_days'], true));
 @endphp
 <div class="card sheet">
     <div class="sheet-head">
-        <strong>{{ $sheet['employee_name'] }}</strong>
+        <strong>{{ $sheet['employee_name'] ?: __('(name not set)') }}</strong>
         @if ($sheet['employee_code']) <span class="muted small">{{ $sheet['employee_code'] }}</span> @endif
         <span class="muted">{{ $sheet['period_start'] }} 〜 {{ $sheet['period_end'] }}</span>
     </div>
 
     <dl class="sheet-summary">
-        @foreach (['scheduled' => '所定時間', 'worked' => '労働時間', 'overtime' => '時間外', 'late_night' => '深夜', 'legal_holiday' => '法定休日', 'legal_holiday_late_night' => '法定休日深夜'] as $kind => $label)
-            <div><dt>{{ $label }} {!! $tag("{$kind}_minutes") !!}</dt><dd>{{ TimeValue::format((int) ($s["{$kind}_minutes"] ?? 0)) }}</dd></div>
+        @foreach ($standard as $kind => $label)
+            @if (($s["{$kind}_minutes"] ?? null) !== null)
+                <div><dt>{{ $label }} {!! $tag("{$kind}_minutes") !!}</dt><dd>{{ TimeValue::format((int) $s["{$kind}_minutes"]) }}</dd></div>
+            @endif
         @endforeach
-        <div><dt>所定出勤日 {!! $tag('scheduled_days') !!}</dt><dd>{{ $s['scheduled_days'] }}</dd></div>
-        <div><dt>出勤日数 {!! $tag('worked_days') !!}</dt><dd>{{ number_format((float) $s['worked_days'], 1) }}</dd></div>
-        <div><dt>有休取得日数 {!! $tag('paid_leave_taken_days') !!}</dt><dd>{{ number_format((float) $s['paid_leave_taken_days'], 1) }}</dd></div>
-        <div><dt>有休残日数</dt><dd>{{ $s['paid_leave_remaining_days'] === null ? '—' : number_format((float) $s['paid_leave_remaining_days'], 1) }}</dd></div>
+        @foreach (['scheduled_days' => '所定出勤日', 'worked_days' => '出勤日数', 'paid_leave_taken_days' => '有休取得日数', 'paid_leave_remaining_days' => '有休残日数'] as $key => $label)
+            @if (($s[$key] ?? null) !== null)
+                <div><dt>{{ $label }} {!! $tag($key) !!}</dt><dd>{{ $key === 'scheduled_days' ? $s[$key] : number_format((float) $s[$key], 1) }}</dd></div>
+            @endif
+        @endforeach
+        @foreach ($fileItems as $item)
+            <div><dt>{{ $item['title'] }}</dt><dd>{{ ($item['type'] ?? '') === 'duration' && $item['value'] !== null ? TimeValue::format((int) $item['value']) : $item['value'] }}</dd></div>
+        @endforeach
     </dl>
     @php $counts = array_filter($s['work_type_counts'] ?? []); @endphp
     @if ($counts)
@@ -36,23 +65,21 @@
 
     <div class="table-wrap">
         <table class="att-table">
-            <thead><tr><th>日付</th><th>勤務区分</th><th>開始</th><th>終了</th><th class="num">休憩</th><th class="num">労働</th><th class="num">時間外</th><th class="num">深夜</th><th class="num">法定休日</th><th>メモ</th><th>確定</th></tr></thead>
+            <thead><tr>
+                <th>{{ __('Date') }}</th>
+                @foreach ($sheet['columns'] as $c)
+                    <th @class(['num' => $c['type'] === 'duration'])>{{ $c['title'] }}</th>
+                @endforeach
+            </tr></thead>
             <tbody>
             @foreach ($sheet['records'] as $i => $r)
                 @php $date = strtotime($r['work_date']); @endphp
                 <tr class="{{ $r['day_type'] }}" @if ($limit && $i >= $limit) data-more hidden @endif>
                     <td>{{ date('n/j', $date) }}({{ $weekdays[(int) date('w', $date)] }})
                         @if ($r['holiday_name']) <span class="holiday-name">{{ $r['holiday_name'] }}</span> @endif</td>
-                    <td>{{ $r['work_type'] }}</td>
-                    <td>{{ $r['start_time'] }}</td>
-                    <td>{{ $r['end_time'] }}</td>
-                    <td class="num">{{ $r['break_minutes'] ? TimeValue::format($r['break_minutes']) : '' }}</td>
-                    <td class="num">{{ $r['worked_minutes'] ? TimeValue::format($r['worked_minutes']) : '' }}</td>
-                    <td class="num">{{ $r['overtime_minutes'] ? TimeValue::format($r['overtime_minutes']) : '' }}</td>
-                    <td class="num">{{ $r['late_night_minutes'] ? TimeValue::format($r['late_night_minutes']) : '' }}</td>
-                    <td class="num">{{ $r['legal_holiday_minutes'] ? TimeValue::format($r['legal_holiday_minutes']) : '' }}</td>
-                    <td class="wrap">{{ $r['memo'] }}</td>
-                    <td>{{ $r['confirmed'] ? '✓' : '' }}</td>
+                    @foreach ($sheet['columns'] as $c)
+                        <td @class(['num' => $c['type'] === 'duration', 'wrap' => $c['type'] === 'text'])>{{ $cell($r, $c) }}</td>
+                    @endforeach
                 </tr>
             @endforeach
             </tbody>

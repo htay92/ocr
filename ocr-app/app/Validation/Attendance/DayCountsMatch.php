@@ -18,6 +18,9 @@ class DayCountsMatch extends AttendanceRule
 
     public function check(ParsedSheet $sheet): RuleResult
     {
+        if (! $sheet->has('work_type')) {
+            return $this->skip(__('No work-type column in this format'));
+        }
         $differences = [];
         if ($sheet->fromFile('work_type_counts')) {
             foreach ($sheet->countedWorkTypes() as $type => $count) {

@@ -10,21 +10,33 @@
         <div class="flash error" role="alert">{{ $errors->first() }}</div>
     @endif
 
-    @if ($preview->route === 'spreadsheet')
-        <form method="GET" class="row card" style="margin-bottom:12px">
+    <form method="GET" class="row card" style="margin-bottom:12px">
+        <div>
+            <label for="profile">{{ __('Template') }}</label>
+            <select id="profile" name="profile">
+                @foreach ($templates as $template)
+                    <option value="{{ $template->id }}" @selected($template->id === $preview->profileId)>{{ $template->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        @if ($preview->needsName() || $employeeName)
             <div>
-                <label for="profile">{{ __('Import profile') }}</label>
-                <select id="profile" name="profile">
-                    @foreach ($profiles as $profile)
-                        <option value="{{ $profile->id }}" @selected($profile->id === $preview->profileId)>{{ $profile->name }}</option>
-                    @endforeach
-                </select>
+                <label for="employee_name">{{ __('Employee name') }} <span class="req">*</span></label>
+                <input id="employee_name" type="text" name="employee_name" value="{{ $employeeName }}" placeholder="山田 花子" @if ($preview->needsName()) autofocus @endif>
             </div>
-            <button class="button secondary" type="submit">{{ __('Read again') }}</button>
-        </form>
-        @if ($preview->unknownColumns)
-            <p class="small muted">{{ __('Columns not used by this profile') }}: {{ implode('、', $preview->unknownColumns) }}</p>
+            <div>
+                <label for="employee_code">{{ __('Employee code') }}</label>
+                <input id="employee_code" type="text" name="employee_code" value="{{ $employeeCode }}">
+            </div>
         @endif
+        <button class="button secondary" type="submit">{{ __('Read again') }}</button>
+    </form>
+    @if ($preview->needsName())
+        <div class="flash error">{{ __('This file does not contain the employee\'s name. Enter it above and read again.') }}</div>
+    @endif
+    <p class="small"><a href="{{ route('templates.design', $key) }}">{{ __('Wrong reading? Create a new template from this file') }}</a></p>
+    @if ($preview->unknownColumns)
+        <p class="small muted">{{ __('Columns not used by this template') }}: {{ implode('、', $preview->unknownColumns) }}</p>
     @endif
 
     @foreach ($preview->sheets as $item)
@@ -39,6 +51,8 @@
     <form method="POST" action="{{ route('attendance.import', $key) }}" class="card actions">
         @csrf
         <input type="hidden" name="profile_id" value="{{ $preview->profileId }}">
+        <input type="hidden" name="employee_name" value="{{ $employeeName }}">
+        <input type="hidden" name="employee_code" value="{{ $employeeCode }}">
         @if ($preview->hasExisting())
             <label class="ack"><input type="checkbox" name="replace" value="1"> {{ __('Replace the earlier import (its file stays in the document list)') }}</label>
         @endif
@@ -47,7 +61,7 @@
         @endif
         <div class="row">
             <button class="button secondary" type="submit" formaction="{{ route('attendance.cancel', $key) }}">{{ __('Cancel') }}</button>
-            <button class="button" type="submit">{{ __('Import') }}</button>
+            <button class="button" type="submit" @disabled($preview->needsName())>{{ __('Import') }}</button>
         </div>
     </form>
 @endsection

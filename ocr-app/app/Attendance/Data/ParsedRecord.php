@@ -5,7 +5,8 @@ namespace App\Attendance\Data;
 use App\Attendance\Support\HolidayCalendar;
 
 /**
- * One day as read from a file, with its day type computed from the date.
+ * One day as read from a file. values holds every column of the format by key;
+ * the standard fields are null when the format has no such column.
  */
 final class ParsedRecord
 {
@@ -13,21 +14,25 @@ final class ParsedRecord
 
     public readonly ?string $holidayName;
 
+    /**
+     * @param  array<string, mixed>  $values  column key => normalized value
+     */
     public function __construct(
         public readonly string $date,
         public readonly ?string $workType = null,
         public readonly ?string $start = null,
         public readonly ?string $end = null,
-        public readonly int $breakMinutes = 0,
-        public readonly int $workedMinutes = 0,
-        public readonly int $overtimeMinutes = 0,
-        public readonly int $lateNightMinutes = 0,
-        public readonly int $legalHolidayMinutes = 0,
-        public readonly int $legalHolidayLateNightMinutes = 0,
+        public readonly ?int $breakMinutes = null,
+        public readonly ?int $workedMinutes = null,
+        public readonly ?int $overtimeMinutes = null,
+        public readonly ?int $lateNightMinutes = null,
+        public readonly ?int $legalHolidayMinutes = null,
+        public readonly ?int $legalHolidayLateNightMinutes = null,
         public readonly ?string $memo = null,
         public readonly bool $confirmed = false,
         public readonly ?int $sourceRow = null,
         public readonly ?string $printedWeekday = null,
+        public readonly array $values = [],
     ) {
         $this->dayType = HolidayCalendar::dayType($date);
         $this->holidayName = HolidayCalendar::holidayName($date);
@@ -39,7 +44,7 @@ final class ParsedRecord
         return $this->start !== null && $this->end !== null && $this->end < $this->start;
     }
 
-    public function minutes(string $kind): int
+    public function minutes(string $kind): ?int
     {
         return match ($kind) {
             'worked' => $this->workedMinutes,
@@ -48,7 +53,7 @@ final class ParsedRecord
             'legal_holiday' => $this->legalHolidayMinutes,
             'legal_holiday_late_night' => $this->legalHolidayLateNightMinutes,
             'break' => $this->breakMinutes,
-            default => 0,
+            default => null,
         };
     }
 
@@ -62,6 +67,7 @@ final class ParsedRecord
             'overtime_minutes' => $this->overtimeMinutes, 'late_night_minutes' => $this->lateNightMinutes,
             'legal_holiday_minutes' => $this->legalHolidayMinutes, 'legal_holiday_late_night_minutes' => $this->legalHolidayLateNightMinutes,
             'memo' => $this->memo, 'confirmed' => $this->confirmed, 'source_row' => $this->sourceRow,
+            'values' => $this->values,
         ];
     }
 }

@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * One employee and period (spec 3.3, 3.7). Hours are stored as minutes.
+ * One employee and period (spec 3.3, 3.7). Hours are stored as minutes; a
+ * standard field is null when the format has no such column. columns is the
+ * template's column list at import time (the format's own titles), summary_values
+ * the file's own summary items.
  */
 class AttendanceSheet extends Model
 {
@@ -18,7 +21,7 @@ class AttendanceSheet extends Model
         'scheduled_minutes', 'worked_minutes', 'overtime_minutes', 'late_night_minutes',
         'legal_holiday_minutes', 'legal_holiday_late_night_minutes',
         'scheduled_days', 'worked_days', 'paid_leave_taken_days', 'paid_leave_remaining_days',
-        'work_type_counts', 'summary_source',
+        'work_type_counts', 'summary_source', 'columns', 'summary_values',
     ];
 
     protected function casts(): array
@@ -31,6 +34,8 @@ class AttendanceSheet extends Model
             'paid_leave_remaining_days' => 'decimal:1',
             'work_type_counts' => 'array',
             'summary_source' => 'array',
+            'columns' => 'array',
+            'summary_values' => 'array',
         ];
     }
 

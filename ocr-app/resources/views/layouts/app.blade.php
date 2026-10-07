@@ -19,7 +19,7 @@
             <nav class="nav">
                 <a href="{{ route('documents.index') }}" @class(['active' => request()->routeIs('documents.index', 'documents.show')])>{{ __('Documents') }}</a>
                 <a href="{{ route('documents.create') }}" @class(['active' => request()->routeIs('documents.create')])>{{ __('Upload') }}</a>
-                <a href="{{ route('attendance.index') }}" @class(['active' => request()->routeIs('attendance.*', 'profiles.*')])>{{ __('Attendance') }}</a>
+                <a href="{{ route('attendance.index') }}" @class(['active' => request()->routeIs('attendance.*', 'templates.*')])>{{ __('Attendance') }}</a>
                 @include('partials.locale')
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf

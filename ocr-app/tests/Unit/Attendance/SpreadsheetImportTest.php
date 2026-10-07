@@ -1,7 +1,8 @@
 <?php
 
-use App\Attendance\Parsers\ProfileMapper;
 use App\Attendance\Parsers\SpreadsheetReader;
+use App\Attendance\Parsers\TemplateMapper;
+use App\Attendance\Template;
 use App\Models\ImportProfile;
 use App\Processing\ProcessingException;
 
@@ -9,7 +10,9 @@ function mapFile(string $path, ?ImportProfile $profile = null): array
 {
     $profile ??= ImportProfile::default();
 
-    return (new ProfileMapper)->map((new SpreadsheetReader)->read($path, $profile), $profile, basename($path));
+    $template = Template::fromProfile($profile);
+
+    return (new TemplateMapper)->map((new SpreadsheetReader)->read($path, $template), $template, basename($path));
 }
 
 it('reads the standard export as CSV (UTF-8 with BOM, Shift-JIS) and Excel alike', function (string $file) {

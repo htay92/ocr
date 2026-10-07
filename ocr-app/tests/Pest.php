@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ImportProfile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -251,4 +252,142 @@ function kintaiXlsx(array $rows, string $path = ''): string
     (new Xlsx($spreadsheet))->save($path);
 
     return $path;
+}
+
+/**
+ * Synthetic copy of the 出勤簿（自動計算） layout (no personal data): year B3 / month B4,
+ * header row 7, day numbers in A, Excel time values, 区分 出勤 / 有給 / -, 合計 row 39,
+ * formula summary cells G3 (出勤日) and G4 (有給日), name cell I4 left empty.
+ * January 2026: 1/2 10:00–24:00 (2:00 late night), 1/5 and 1/7 8 h, 1/6 paid leave.
+ */
+function shukkinboXlsx(): string
+{
+    $book = new Spreadsheet;
+    $s = $book->getActiveSheet()->setTitle('出勤簿');
+    $s->fromArray([['出勤簿（自動計算）']], null, 'A1');
+    $s->fromArray([['年', 2026, '所定始業', null, 0.375, '出勤日', '=COUNTA(C8:C38)', '所属']], null, 'A3');
+    $s->fromArray([['月', 1, '所定終業', null, 0.75, '有給日', '=COUNTIF(J8:J38,"有給")', '氏名']], null, 'A4');
+    $s->fromArray([[null, null, '休憩時間', null, '1:00']], null, 'A5');
+    $s->fromArray([['日', '曜日', '出勤', '退勤', '休憩', '実働', '時間外', '深夜', '休日', '区分']], null, 'A7');
+    $weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    $days = [2 => [10 / 24, 1.0, 1 / 24, 13 / 24, 5 / 24, 2 / 24], 5 => [8 / 24, 17 / 24, 1 / 24, 8 / 24, 0, null], 7 => [9 / 24, 18 / 24, 1 / 24, 8 / 24, 0, null]];
+    for ($d = 1; $d <= 31; $d++) {
+        $row = 7 + $d;
+        $s->setCellValue("A{$row}", $d);
+        $s->setCellValue("B{$row}", $weekday[(int) date('w', mktime(0, 0, 0, 1, $d, 2026))]);
+        if (isset($days[$d])) {
+            foreach (['C', 'D', 'E', 'F', 'G', 'H'] as $i => $col) {
+                if ($days[$d][$i] !== null) {
+                    $s->setCellValue("{$col}{$row}", $days[$d][$i]);
+                    $s->getStyle("{$col}{$row}")->getNumberFormat()->setFormatCode('h:mm');
+                }
+            }
+        }
+        $s->setCellValue("J{$row}", isset($days[$d]) ? '出勤' : ($d === 6 ? '有給' : '-'));
+    }
+    $s->fromArray([['合計', null, null, null, null, 29 / 24, 5 / 24, 2 / 24, 0]], null, 'A39');
+    foreach (['F39', 'G39', 'H39', 'I39'] as $cell) {
+        $s->getStyle($cell)->getNumberFormat()->setFormatCode('[h]:mm');
+    }
+    $s->setCellValue('A41', '1. 年月、所定時間を入力します');
+    $path = tempnam(sys_get_temp_dir(), 'shukkinbo').'.xlsx';
+    (new Xlsx($book))->save($path);   // formulas saved with their results
+
+    return $path;
+}
+
+/**
+ * Synthetic copy of the 作業報告書 layout (no personal data): year A1 / month C1, name A4
+ * (below 名前), summary C4 / E4 / G4, header row 6, day numbers in A, 稼働時間 in decimal
+ * hours, 区分 稼働 / 休日, no break column, plus a free column 作業内容 (H).
+ * November 2025: 18 working days (11/3 and 11/24 are holidays), 10:00–19:00, 11/12 until 19:15.
+ */
+function sagyouHoukokushoXlsx(string $name = '田中'): string
+{
+    $book = new Spreadsheet;
+    $s = $book->getActiveSheet()->setTitle("{$name}202511");
+    $s->fromArray([[2025, '年', 11, '月度 勤務表 兼 作業報告書']], null, 'A1');
+    $s->fromArray([['名前', null, '出勤日数（日）', null, '休日日数（日）', null, '稼働時間（時間）', null, '精算時間（時間）']], null, 'A3');
+    $s->fromArray([[$name, null, '=COUNTIF(C7:C36,"稼働")', null, '=COUNTIF(C7:C36,"休日")', null, '=SUM(F7:F36)']], null, 'A4');
+    $s->fromArray([['就業日', null, '区分', '始業時間', '終業時間', '稼働時間', '備考', '作業内容']], null, 'A6');
+    $weekday = ['日', '月', '火', '水', '木', '金', '土'];
+    for ($d = 1; $d <= 30; $d++) {
+        $row = 6 + $d;
+        $time = mktime(0, 0, 0, 11, $d, 2025);
+        $working = (int) date('N', $time) <= 5 && ! in_array($d, [3, 24], true);
+        $s->setCellValue("A{$row}", $d);
+        $s->setCellValue("B{$row}", $weekday[(int) date('w', $time)]);
+        $s->setCellValue("C{$row}", $working ? '稼働' : '休日');
+        if ($working) {
+            $s->setCellValue("D{$row}", 10 / 24);
+            $s->setCellValue("E{$row}", $d === 12 ? (19.25 / 24) : (19 / 24));
+            $s->setCellValue("F{$row}", $d === 12 ? 8.25 : 8.0);
+            $s->getStyle("D{$row}:E{$row}")->getNumberFormat()->setFormatCode('h:mm');
+            $s->getStyle("F{$row}")->getNumberFormat()->setFormatCode('0.0_);[Red]\(0.0\)');
+            $s->setCellValue("H{$row}", 'システム開発');
+        }
+        if ($d === 12) {
+            $s->setCellValue("G{$row}", '客先作業');
+        }
+    }
+    $path = tempnam(sys_get_temp_dir(), 'sagyou').'.xlsx';
+    (new Xlsx($book))->save($path);
+
+    return $path;
+}
+
+/** Templates as the setting page would save them for the two layouts above. */
+function shukkinboTemplate(): ImportProfile
+{
+    return ImportProfile::create([
+        'name' => '出勤簿（自動計算）', 'kind' => 'spreadsheet', 'header_row' => 7,
+        'settings' => [
+            'header_row' => 7, 'year_cell' => 'B3', 'month_cell' => 'B4', 'name_source' => 'cell', 'name_cell' => 'I4',
+            'columns' => [
+                ['key' => 'c1', 'title' => '日', 'letter' => 'A', 'type' => 'day', 'role' => 'work_day'],
+                ['key' => 'c3', 'title' => '出勤', 'letter' => 'C', 'type' => 'time', 'role' => 'start_time'],
+                ['key' => 'c4', 'title' => '退勤', 'letter' => 'D', 'type' => 'time', 'role' => 'end_time'],
+                ['key' => 'c5', 'title' => '休憩', 'letter' => 'E', 'type' => 'duration', 'role' => 'break_minutes'],
+                ['key' => 'c6', 'title' => '実働', 'letter' => 'F', 'type' => 'duration', 'role' => 'worked_minutes'],
+                ['key' => 'c7', 'title' => '時間外', 'letter' => 'G', 'type' => 'duration', 'role' => 'overtime_minutes'],
+                ['key' => 'c8', 'title' => '深夜', 'letter' => 'H', 'type' => 'duration', 'role' => 'late_night_minutes'],
+                ['key' => 'c9', 'title' => '休日', 'letter' => 'I', 'type' => 'duration', 'role' => 'legal_holiday_minutes'],
+                ['key' => 'c10', 'title' => '区分', 'letter' => 'J', 'type' => 'work_type', 'role' => 'work_type'],
+            ],
+            'work_types' => ['出勤' => '出勤', '有給' => '有給休暇', '-' => null],
+            'summary' => [
+                ['title' => '出勤日', 'cell' => 'G3', 'type' => 'days', 'role' => 'worked_days'],
+                ['title' => '有給日', 'cell' => 'G4', 'type' => 'days', 'role' => 'paid_leave_taken_days'],
+            ],
+            'totals_label' => '合計',
+        ],
+        'match' => ['anchors' => ['出勤簿（自動計算）'], 'headers' => ['日', '曜日', '出勤', '退勤', '休憩', '実働', '時間外', '深夜', '休日', '区分']],
+    ]);
+}
+
+function sagyouTemplate(): ImportProfile
+{
+    return ImportProfile::create([
+        'name' => '作業報告書', 'kind' => 'spreadsheet', 'header_row' => 6,
+        'settings' => [
+            'header_row' => 6, 'year_cell' => 'A1', 'month_cell' => 'C1', 'name_source' => 'cell', 'name_cell' => 'A4', 'break_default' => 60,
+            'columns' => [
+                ['key' => 'c1', 'title' => '就業日', 'letter' => 'A', 'type' => 'day', 'role' => 'work_day'],
+                ['key' => 'c3', 'title' => '区分', 'letter' => 'C', 'type' => 'work_type', 'role' => 'work_type'],
+                ['key' => 'c4', 'title' => '始業時間', 'letter' => 'D', 'type' => 'time', 'role' => 'start_time'],
+                ['key' => 'c5', 'title' => '終業時間', 'letter' => 'E', 'type' => 'time', 'role' => 'end_time'],
+                ['key' => 'c6', 'title' => '稼働時間', 'letter' => 'F', 'type' => 'duration', 'role' => 'worked_minutes', 'unit' => 'hours'],
+                ['key' => 'c7', 'title' => '備考', 'letter' => 'G', 'type' => 'text', 'role' => 'memo'],
+                ['key' => 'c8', 'title' => '作業内容', 'letter' => 'H', 'type' => 'text', 'role' => null],
+            ],
+            'work_types' => ['稼働' => '出勤', '休日' => null],
+            'summary' => [
+                ['title' => '出勤日数（日）', 'cell' => 'C4', 'type' => 'days', 'role' => 'worked_days'],
+                ['title' => '休日日数（日）', 'cell' => 'E4', 'type' => 'days', 'role' => null],
+                ['title' => '稼働時間（時間）', 'cell' => 'G4', 'type' => 'duration', 'unit' => 'hours', 'role' => 'worked_minutes'],
+            ],
+            'totals_label' => null,
+        ],
+        'match' => ['anchors' => ['月度勤務表兼作業報告書'], 'headers' => ['就業日', '区分', '始業時間', '終業時間', '稼働時間', '備考']],
+    ]);
 }

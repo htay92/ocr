@@ -28,6 +28,11 @@ final class ImportPreview
         return collect($this->sheets)->contains(fn ($item) => RuleResult::criticalCount($item['results']) > 0);
     }
 
+    public function needsName(): bool
+    {
+        return collect($this->sheets)->contains(fn ($item) => $item['sheet']->needsName || $item['sheet']->employeeName === '');
+    }
+
     public function hasExisting(): bool
     {
         return collect($this->sheets)->contains(fn ($item) => $item['existing'] !== null);

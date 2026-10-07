@@ -2,57 +2,105 @@
 
 namespace App\Attendance\Parsers;
 
-use App\Models\ImportProfile;
+use App\Attendance\Support\Grid;
+use App\Attendance\Template;
 use App\Processing\ProcessingException;
+use PhpOffice\PhpSpreadsheet\Cell\Cell;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
 
 /**
  * Reads CSV (encoding detected: UTF-8 with or without BOM, else Shift-JIS) and
- * Excel (XLSX, XLS) into rows of strings, keeping the row numbers of the file.
+ * Excel (XLSX, XLS) into a Grid. For Excel, formula cells give the value Excel
+ * saved: recalculating would change results (formulas with TODAY()) or fail.
  */
 class SpreadsheetReader
 {
     /**
-     * @return array<int, list<string>> file row number (1-based) => cells
-     *
-     * @throws ProcessingException E-IMP-01 when the encoding cannot be detected
+     * @throws ProcessingException E-IMP-01 when a CSV's encoding cannot be detected
      */
-    public function read(string $path, ImportProfile $profile): array
+    public function read(string $path, Template $template, ?string $fileName = null): Grid
     {
-        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $extension = strtolower(pathinfo($fileName ?? $path, PATHINFO_EXTENSION));
 
-        return in_array($extension, ['xlsx', 'xls'], true) ? $this->excel($path) : $this->csv($path, $profile);
+        return in_array($extension, ['xlsx', 'xls'], true)
+            ? $this->excel($path, $template->sheet)
+            : $this->csv($path, $template->encoding, $template->delimiter);
     }
 
-    private function csv(string $path, ImportProfile $profile): array
+    private function csv(string $path, string $encoding, string $delimiter): Grid
     {
-        $content = (string) file_get_contents($path);
-        $content = $this->toUtf8($content, $profile->encoding ?: 'auto');
-
         $handle = fopen('php://temp', 'w+');
-        fwrite($handle, $content);
+        fwrite($handle, $this->toUtf8((string) file_get_contents($path), $encoding));
         rewind($handle);
 
         $rows = [];
         $number = 0;
-        while (($cells = fgetcsv($handle, null, $profile->delimiter ?: ',', '"', '')) !== false) {
+        while (($cells = fgetcsv($handle, null, $delimiter ?: ',', '"', '')) !== false) {
             $number++;
-            $rows[$number] = array_map(fn ($cell) => trim((string) $cell), $cells);
+            foreach ($cells as $i => $cell) {
+                if (trim((string) $cell) !== '') {
+                    $rows[$number][Template::letter($i)] = trim((string) $cell);
+                }
+            }
+            $rows[$number] ??= [];
         }
         fclose($handle);
 
-        return $rows;
+        return new Grid($rows);
     }
 
-    private function excel(string $path): array
+    private function excel(string $path, string $sheet): Grid
     {
-        $sheet = IOFactory::load($path)->getActiveSheet();
+        $reader = IOFactory::createReaderForFile($path);
+        $book = $reader->load($path);
+        $worksheet = match (true) {
+            $sheet === 'first' || $sheet === '' => $book->getSheet(0),
+            ctype_digit($sheet) => $book->getSheet((int) $sheet - 1),
+            default => $book->getSheetByName($sheet) ?? $book->getSheet(0),
+        };
+
         $rows = [];
-        foreach ($sheet->toArray(null, true, true, false) as $i => $cells) {
-            $rows[$i + 1] = array_map(fn ($cell) => trim((string) $cell), $cells);
+        $formats = [];
+        $lastRow = $worksheet->getHighestDataRow();
+        $lastColumn = $worksheet->getHighestDataColumn();
+        foreach ($worksheet->getRowIterator(1, $lastRow) as $row) {
+            $number = $row->getRowIndex();
+            $rows[$number] = [];
+            foreach ($row->getCellIterator('A', $lastColumn) as $cell) {
+                $value = self::value($cell);
+                if ($value === null || $value === '') {
+                    continue;
+                }
+                $rows[$number][$cell->getColumn()] = $value;
+                $format = $cell->getStyle()->getNumberFormat()->getFormatCode();
+                if ($format !== 'General') {
+                    $formats[$cell->getCoordinate()] = $format;
+                }
+            }
         }
 
-        return $rows;
+        return new Grid($rows, $formats, $worksheet->getTitle());
+    }
+
+    /** The saved value: for formulas, Excel's last calculated result. */
+    private static function value(Cell $cell): mixed
+    {
+        $value = $cell->getValue();
+        if ($cell->isFormula()) {
+            $value = $cell->getOldCalculatedValue();
+        }
+        if ($value instanceof RichText) {
+            $value = $value->getPlainText();
+        }
+        if (is_string($value)) {
+            $value = trim($value);
+            if (in_array($value, ['#VALUE!', '#N/A', '#REF!', '#DIV/0!', '#NAME?'], true)) {
+                return null;
+            }
+        }
+
+        return $value;
     }
 
     private function toUtf8(string $content, string $encoding): string

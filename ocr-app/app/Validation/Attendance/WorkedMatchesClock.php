@@ -15,6 +15,9 @@ class WorkedMatchesClock extends AttendanceRule
 
     public function check(ParsedSheet $sheet): RuleResult
     {
+        if (! $sheet->has('start_time') || ! $sheet->has('end_time') || ! $sheet->has('worked_minutes')) {
+            return $this->skip(__('No clock times'));
+        }
         $bad = [];
         $checked = 0;
         foreach ($sheet->records as $record) {
@@ -23,7 +26,8 @@ class WorkedMatchesClock extends AttendanceRule
             }
             $checked++;
             $span = (self::minutes($record->end) - self::minutes($record->start) + 1440) % 1440;
-            if (abs($span - $record->breakMinutes - $record->workedMinutes) > 1) {
+            // A format without a break column counts no break.
+            if (abs($span - ($record->breakMinutes ?? 0) - ($record->workedMinutes ?? 0)) > 1) {
                 $bad[] = $record->sourceRow;
             }
         }

@@ -12,16 +12,9 @@
         @csrf
         <label class="field"><span class="label">{{ __('File') }}</span>
             <input type="file" name="file" accept=".pdf,.csv,.xlsx,.xls" required>
-            <span class="muted small">{{ __('勤務データ PDF, or a CSV / Excel export · up to :max MB', ['max' => $maxMb]) }}</span>
-        </label>
-        <label class="field"><span class="label">{{ __('Import profile (CSV / Excel only)') }}</span>
-            <select name="profile_id">
-                @foreach ($profiles as $profile)
-                    <option value="{{ $profile->id }}">{{ $profile->name }}</option>
-                @endforeach
-            </select>
+            <span class="muted small">{{ __('PDF, CSV or Excel · up to :max MB. The matching template is chosen automatically.', ['max' => $maxMb]) }}</span>
         </label>
         <button class="button" type="submit">{{ __('Preview') }}</button>
     </form>
-    <p class="small"><a href="{{ route('profiles.index') }}">{{ __('Import profiles (column mapping)') }}</a></p>
+    <p class="small"><a href="{{ route('templates.index') }}">{{ __('Templates') }}</a> · {{ __('A new format? Create its template first.') }}</p>
 @endsection

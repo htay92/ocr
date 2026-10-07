@@ -1,8 +1,9 @@
 <?php
 
-use App\Attendance\Parsers\KintaiPdfParser;
-use App\Attendance\Parsers\ProfileMapper;
+use App\Attendance\Parsers\PdfTableParser;
 use App\Attendance\Parsers\SpreadsheetReader;
+use App\Attendance\Parsers\TemplateMapper;
+use App\Attendance\Template;
 use App\Models\ImportProfile;
 use App\Validation\AttendanceValidator;
 
@@ -14,14 +15,15 @@ function attendanceLevel(string $code, ?Closure $change = null, string $source =
         if ($change) {
             $words = $change($words);
         }
-        $sheet = (new KintaiPdfParser)->parseWords($words);
+        $sheet = (new PdfTableParser)->parseWords($words);
     } else {
         $rows = kintaiRows();
         if ($change) {
             $rows = $change($rows);
         }
         $profile = ImportProfile::default();
-        $sheet = (new ProfileMapper)->map((new SpreadsheetReader)->read(kintaiCsv($rows), $profile), $profile, 'kintai-2026-10.csv')['sheets'][0];
+        $template = Template::fromProfile($profile);
+        $sheet = (new TemplateMapper)->map((new SpreadsheetReader)->read(kintaiCsv($rows), $template), $template, 'kintai-2026-10.csv')['sheets'][0];
     }
 
     return collect((new AttendanceValidator)->validate($sheet))->firstWhere('code', $code)->level;

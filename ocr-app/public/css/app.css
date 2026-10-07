@@ -248,3 +248,16 @@ details.more h3 { font-size: 1rem; margin: 16px 0 6px; }
 
 /* Documents without a picture (CSV / Excel attendance): one column. */
 .detail.single { grid-template-columns: minmax(0, 1fr); }
+
+/* Template setting page */
+.sample { padding: 10px; }
+.grid { font-size: .75rem; border-collapse: collapse; }
+.grid th, .grid td { border: 1px solid var(--line); padding: 3px 6px; white-space: nowrap; max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+.grid thead th, .grid tbody th { background: var(--bg); color: var(--muted); font-weight: 600; text-align: center; }
+.grid tr.header td { background: var(--info-bg); font-weight: 700; }
+.pdf-lines { font-size: .8rem; margin: 8px 0 0; padding-left: 2.2em; max-height: 70vh; overflow: auto; }
+.column-list { display: grid; gap: 0; }
+.column-row { grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(8em, 1fr)); }
+@media (max-width: 700px) { .column-row { grid-template-columns: minmax(0, 1fr); } }
+.column-row .check { flex-direction: row; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.template-item p { margin: 6px 0; }

@@ -24,6 +24,9 @@ class TotalsMatch extends AttendanceRule
         $compared = false;
         foreach (self::LABELS as $kind => $label) {
             $sum = $sheet->sum($kind);
+            if ($sum === null) {
+                continue;   // the format has no such column
+            }
             foreach ([
                 __('summary') => $sheet->fromFile("{$kind}_minutes") ? $sheet->summary["{$kind}_minutes"] : null,
                 __('合計 row') => $sheet->totals[$kind] ?? null,

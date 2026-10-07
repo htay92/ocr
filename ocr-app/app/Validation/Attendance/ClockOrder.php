@@ -15,6 +15,9 @@ class ClockOrder extends AttendanceRule
 
     public function check(ParsedSheet $sheet): RuleResult
     {
+        if (! $sheet->has('start_time') || ! $sheet->has('end_time')) {
+            return $this->skip(__('No clock-in / clock-out columns in this format'));
+        }
         $bad = [];
         $overnight = [];
         foreach ($sheet->records as $record) {

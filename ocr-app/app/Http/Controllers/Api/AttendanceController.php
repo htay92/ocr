@@ -3,13 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Attendance\AttendanceImporter;
+use App\Attendance\NoTemplateMatches;
+use App\Attendance\Template;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\ImportProfileController;
 use App\Http\Resources\DocumentResource;
 use App\Models\ImportProfile;
 use App\Processing\ProcessingException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class AttendanceController extends Controller
 {
@@ -27,9 +29,11 @@ class AttendanceController extends Controller
         $profile = $request->input('profile_id') ? ImportProfile::find($request->input('profile_id')) : null;
 
         try {
-            $preview = $importer->preview($file->getRealPath(), $file->getClientOriginalName(), $profile);
+            $preview = $importer->preview($file->getRealPath(), $file->getClientOriginalName(), $profile, $request->input('employee_name'), $request->input('employee_code'));
         } catch (ProcessingException $e) {
             return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
+        } catch (NoTemplateMatches $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => 'NO-TEMPLATE'], 422);
         }
 
         if ($request->boolean('dry_run')) {
@@ -52,15 +56,37 @@ class AttendanceController extends Controller
 
     public function storeProfile(Request $request): JsonResponse
     {
-        $data = ImportProfileController::normalize($request->validate(ImportProfileController::rules()));
+        $data = $request->validate(self::templateRules());
 
         return response()->json(['data' => ImportProfile::create($data)], 201);
     }
 
     public function updateProfile(Request $request, ImportProfile $profile): JsonResponse
     {
-        $profile->update(ImportProfileController::normalize($request->validate(ImportProfileController::rules($profile))));
+        $profile->update($request->validate(self::templateRules($profile)));
 
         return response()->json(['data' => $profile]);
+    }
+
+    /**
+     * Templates through the API: kind, settings (columns, cells, units, work types…
+     * as in App\Attendance\Template) and match; older column_map profiles too.
+     */
+    private static function templateRules(?ImportProfile $profile = null): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:100', Rule::unique('import_profiles', 'name')->ignore($profile?->id)],
+            'kind' => ['sometimes', Rule::in(['spreadsheet', 'pdf'])],
+            'encoding' => ['sometimes', Rule::in(['auto', 'UTF-8', 'SJIS-win'])],
+            'delimiter' => ['sometimes', 'string', 'size:1'],
+            'header_row' => ['sometimes', 'integer', 'min:1', 'max:200'],
+            'column_map' => ['sometimes', 'nullable', 'array'],
+            'settings' => ['sometimes', 'nullable', 'array'],
+            'settings.columns' => ['sometimes', 'array'],
+            'settings.columns.*.title' => ['required_with:settings.columns', 'string', 'max:100'],
+            'settings.columns.*.type' => ['nullable', Rule::in(Template::TYPES)],
+            'settings.columns.*.role' => ['nullable', Rule::in(Template::ROLES)],
+            'match' => ['sometimes', 'nullable', 'array'],
+        ];
     }
 }

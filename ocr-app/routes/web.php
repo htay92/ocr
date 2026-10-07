@@ -1,9 +1,9 @@
 <?php
 
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendanceTemplateController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DocumentController;
-use App\Http\Controllers\ImportProfileController;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Support\Facades\Route;
 
@@ -44,5 +44,11 @@ Route::middleware('auth')->group(function () {
     Route::get('attendance/import/{key}', [AttendanceController::class, 'preview'])->name('attendance.preview');
     Route::post('attendance/import/{key}', [AttendanceController::class, 'import'])->name('attendance.import');
     Route::post('attendance/import/{key}/cancel', [AttendanceController::class, 'cancel'])->name('attendance.cancel');
-    Route::resource('attendance/profiles', ImportProfileController::class)->except(['show', 'destroy'])->names('profiles');
+
+    // Attendance templates (setting page): one per company format, made from a sample file.
+    Route::get('attendance/templates', [AttendanceTemplateController::class, 'index'])->name('templates.index');
+    Route::get('attendance/templates/new', [AttendanceTemplateController::class, 'create'])->name('templates.create');
+    Route::post('attendance/templates/sample', [AttendanceTemplateController::class, 'sample'])->name('templates.sample');
+    Route::get('attendance/templates/design/{key}', [AttendanceTemplateController::class, 'design'])->name('templates.design');
+    Route::post('attendance/templates/design/{key}', [AttendanceTemplateController::class, 'save'])->name('templates.save');
 });

@@ -3,10 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * How to read one attendance source's CSV or Excel export (spec 3.3, 3.7).
- * column_map: system field => column name, or column number (1 = first).
+ * An attendance template (spec 3.3 import_profiles, extended): how to read one
+ * company's format. kind: spreadsheet (CSV / Excel) or pdf. settings: columns
+ * (free per format), header row, cells for year / month / name / summary,
+ * units and work-type words (see App\Attendance\Template). match: header
+ * titles and anchor texts that identify files of this format. Older profiles
+ * only have column_map (system field => column title or number).
  */
 class ImportProfile extends Model
 {
@@ -17,11 +22,21 @@ class ImportProfile extends Model
         'legal_holiday_minutes', 'legal_holiday_late_night_minutes', 'memo', 'confirmed',
     ];
 
-    protected $fillable = ['name', 'encoding', 'delimiter', 'header_row', 'column_map', 'date_format', 'time_format'];
+    protected $fillable = ['name', 'kind', 'encoding', 'delimiter', 'header_row', 'column_map', 'date_format', 'time_format', 'settings', 'match'];
+
+    protected $attributes = ['kind' => 'spreadsheet'];
 
     protected function casts(): array
     {
-        return ['column_map' => 'array', 'header_row' => 'integer'];
+        return ['column_map' => 'array', 'settings' => 'array', 'match' => 'array', 'header_row' => 'integer'];
+    }
+
+    /**
+     * @return HasMany<AttendanceSheet, $this>
+     */
+    public function attendanceSheets(): HasMany
+    {
+        return $this->hasMany(AttendanceSheet::class);
     }
 
     public static function default(): self

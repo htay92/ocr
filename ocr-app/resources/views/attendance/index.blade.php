@@ -5,7 +5,7 @@
         <h1>{{ __('Attendance') }}</h1>
         <a class="button" href="{{ route('attendance.create') }}" style="flex:0 0 auto">{{ __('Import') }}</a>
     </div>
-    <p class="small"><a href="{{ route('profiles.index') }}">{{ __('Import profiles (column mapping)') }}</a></p>
+    <p class="small"><a href="{{ route('templates.index') }}">{{ __('Templates (one per company format)') }}</a></p>
 
     @if ($sheets->isEmpty())
         <div class="card empty">

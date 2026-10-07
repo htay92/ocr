@@ -2,9 +2,9 @@
 
 namespace App\Attendance;
 
-use App\Attendance\Parsers\KintaiPdfParser;
-use App\Attendance\Parsers\ProfileMapper;
+use App\Attendance\Parsers\PdfTableParser;
 use App\Attendance\Parsers\SpreadsheetReader;
+use App\Attendance\Parsers\TemplateMapper;
 use App\Models\AttendanceSheet;
 use App\Models\Document;
 use App\Models\ImportProfile;
@@ -24,23 +24,31 @@ use Illuminate\Validation\ValidationException;
 class AttendanceImporter
 {
     public function __construct(
-        private readonly KintaiPdfParser $pdf,
         private readonly SpreadsheetReader $reader,
-        private readonly ProfileMapper $mapper,
+        private readonly TemplateMapper $mapper,
+        private readonly TemplateMatcher $matcher,
         private readonly AttendanceValidator $validator,
     ) {}
 
     /**
+     * Read a file with a template: the one given, else the best match among the
+     * saved templates (auto-pick). The employee's name can be given when the
+     * format does not hold it.
+     *
+     * @throws NoTemplateMatches when no template fits the file
      * @throws ProcessingException E-IMP-01 / E-IMP-02 / E-PDF-01
      */
-    public function preview(string $path, string $fileName, ?ImportProfile $profile = null): ImportPreview
+    public function preview(string $path, string $fileName, ?ImportProfile $profile = null, ?string $name = null, ?string $code = null): ImportPreview
     {
-        if (strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) === 'pdf') {
-            $sheets = [$this->pdf->parse($path)];
-            [$unknown, $route, $profile] = [[], Document::ROUTE_PDF_TEXT, null];
+        $profile ??= $this->matcher->best($path, $fileName) ?? throw new NoTemplateMatches(__('No template fits this file.'));
+        $template = Template::fromProfile($profile);
+
+        if ($template->kind === 'pdf') {
+            $sheet = (new PdfTableParser($template))->parse($path);
+            $sheets = [$name ? $sheet->withEmployee($name, $code) : $sheet];
+            [$unknown, $route] = [[], Document::ROUTE_PDF_TEXT];
         } else {
-            $profile ??= ImportProfile::default();
-            $mapped = $this->mapper->map($this->reader->read($path, $profile), $profile, $fileName);
+            $mapped = $this->mapper->map($this->reader->read($path, $template, $fileName), $template, $fileName, $name, $code);
             [$sheets, $unknown, $route] = [$mapped['sheets'], $mapped['unknown_columns'], Document::ROUTE_SPREADSHEET];
         }
 
@@ -52,11 +60,12 @@ class AttendanceImporter
             sheets: array_map(fn ($sheet) => [
                 'sheet' => $sheet,
                 'results' => $this->validator->validate($sheet),
-                'existing' => AttendanceSheet::where('employee_name', $sheet->employeeName)->whereDate('period_start', $sheet->periodStart)->first(),
+                'existing' => $sheet->employeeName === '' ? null
+                    : AttendanceSheet::where('employee_name', $sheet->employeeName)->whereDate('period_start', $sheet->periodStart)->first(),
             ], $sheets),
             unknownColumns: $unknown,
             route: $route,
-            profileId: $profile?->id,
+            profileId: $profile->id,
         );
     }
 
@@ -71,6 +80,9 @@ class AttendanceImporter
      */
     public function import(ImportPreview $preview, string $path, string $fileName, User $user, bool $replace, bool $acknowledged, ?Document $document = null): Document
     {
+        if ($preview->needsName()) {
+            throw ValidationException::withMessages(['employee_name' => __('Enter the employee\'s name: this file does not contain it.')]);
+        }
         if ($preview->hasExisting() && ! $replace) {
             throw ValidationException::withMessages(['replace' => __('This employee and period were imported before. Choose Replace to import again.')]);
         }
