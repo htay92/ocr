@@ -148,7 +148,13 @@ class TemplateDesigner
 
     private function analysePdf(string $path): array
     {
-        $lines = PdfTableParser::lines(PdfTableParser::words($path));
+        return $this->analysePdfWords(PdfTableParser::words($path));
+    }
+
+    /** A PDF's words ([text, xMin, yMin, xMax, yMax]) → the suggested template, as analyse() returns it. */
+    public function analysePdfWords(array $words): array
+    {
+        $lines = PdfTableParser::lines($words);
         $texts = array_map(fn ($line) => array_column($line, 0), $lines);
 
         $titleIndex = collect($texts)->search(fn ($words) => preg_match_all('/\d{4}\s?[年\/\-]\s?\d{1,2}/u', implode(' ', $words)) >= 2);
@@ -170,7 +176,7 @@ class TemplateDesigner
 
         $columns = [];
         foreach ($header === null ? [] : $texts[$header] as $i => $title) {
-            $role = $this->guessRole($title, $i === 0 ? ['10/1(木)'] : []);
+            $role = $this->guessRole($title, $i === 0 ? [$texts[$header + 1][0] ?? ''] : []);   // "10/1(木)" → date, "1" → day
             $columns[] = ['key' => 'c'.($i + 1), 'title' => $title, 'letter' => null,
                 'type' => $role ? Template::ROLE_TYPES[$role] : 'text', 'role' => $role, 'unit' => 'auto', 'include' => true, 'samples' => []];
         }
@@ -188,7 +194,11 @@ class TemplateDesigner
                     continue;
                 }
                 $role = $this->summaryRole($label);
-                $type = str_contains($value[0], ':') ? 'duration' : (str_contains($value[0], '日') ? 'days' : 'number');
+                $type = match (true) {
+                    str_contains($value[0], ':'), str_ends_with($role ?? '', '_minutes'), (bool) preg_match('/時間/u', $label) => 'duration',   // "96.3" under 稼働時間（時間）: hours
+                    str_contains($value[0], '日'), (bool) preg_match('/日数|（日）|\(日\)/u', $label) => 'days',
+                    default => 'number',
+                };
                 $summary[] = ['title' => $label, 'type' => $type, 'unit' => 'auto', 'role' => $role
                     ?? (in_array($label, ParsedSheet::WORK_TYPES, true) ? "count:{$label}" : null), 'include' => true, 'value' => $value[0]];
             }
@@ -196,18 +206,34 @@ class TemplateDesigner
 
         $hasTotals = $header !== null && collect(array_slice($texts, $header))->contains(fn ($w) => in_array('合計', $w, true));
 
+        // Work-type words: the words under the work-type column's title.
+        $workTypeValues = [];
+        $index = collect($columns)->search(fn ($c) => $c['role'] === 'work_type');
+        if ($index !== false) {
+            [, $x1, , $x2] = $lines[$header][$index];
+            foreach (array_slice($lines, $header + 1) as $line) {
+                foreach ($line as [$text, $w1, , $w2]) {
+                    if (abs(($w1 + $w2) / 2 - ($x1 + $x2) / 2) <= ($x2 - $x1) / 2 + 4 && ! preg_match('/\d/u', $text) && $text !== '合計') {
+                        $workTypeValues[$text] = true;
+                    }
+                }
+            }
+            $workTypeValues = array_keys($workTypeValues);
+        }
+
         return [
             'kind' => 'pdf',
             'lines' => array_map(fn ($w) => implode(' ', $w), $texts),
             'pairs' => [],
-            'anchors' => array_values(array_filter([$marker])),
-            'work_type_values' => [],
+            'anchors' => array_values(array_filter([$marker ?: $this->titleWord($texts)])),
+            'work_type_values' => $workTypeValues,
             'settings' => [
                 'title_marker' => $marker,
                 'columns' => $columns,
                 'summary' => $summary,
                 'totals_label' => $hasTotals ? '合計' : null,
-                'work_types' => [],
+                'work_types' => array_combine($workTypeValues, array_map(fn ($v) => $this->workTypeFor($v), $workTypeValues)) ?: [],
+                'break_default' => null,
             ],
         ];
     }
@@ -242,6 +268,15 @@ class TemplateDesigner
         }
 
         return $candidate;
+    }
+
+    /** For a PDF without a title marker: the longest word without digits in the first line ("作業報告書"), to recognise the format. */
+    private function titleWord(array $texts): ?string
+    {
+        $words = array_filter($texts[0] ?? [], fn ($w) => ! preg_match('/\d/u', $w) && mb_strlen($w) >= 3);
+        usort($words, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+
+        return $words[0] ?? null;
     }
 
     /**
@@ -282,6 +317,7 @@ class TemplateDesigner
         ];
         if ($kind === 'pdf') {
             $settings['title_marker'] = (string) ($input['title_marker'] ?? '');
+            $settings['break_default'] = ($input['break_default'] ?? '') !== '' ? TimeValue::minutes($input['break_default']) : null;
         } else {
             $settings += [
                 'header_row' => (int) ($input['header_row'] ?? 1),

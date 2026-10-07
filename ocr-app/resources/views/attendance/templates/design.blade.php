@@ -94,11 +94,11 @@
                     <label class="field"><span class="label">{{ __('Name cell') }}</span>
                         <input type="text" name="name_cell" value="{{ $settings['name_cell'] }}" list="cells" placeholder="A4">
                     </label>
-                    <label class="field"><span class="label">{{ __('Break when there is no break column') }}</span>
-                        <input type="text" name="break_default" value="{{ $settings['break_default'] ?? '' }}" placeholder="1:00">
-                    </label>
                     <datalist id="cells">@foreach ($cellOptions as $option) <option value="{{ strtok($option, ' ') }}">{{ $option }}</option> @endforeach</datalist>
                 @endif
+                <label class="field"><span class="label">{{ __('Break when there is no break column') }}</span>
+                    <input type="text" name="break_default" value="{{ $settings['break_default'] ?? '' }}" placeholder="1:00">
+                </label>
                 <label class="field"><span class="label">{{ __('Totals row label') }}</span>
                     <input type="text" name="totals_label" value="{{ $settings['totals_label'] }}" placeholder="合計">
                 </label>
@@ -107,6 +107,9 @@
             <h2>{{ __('Columns') }}</h2>
             <p class="muted small">{{ __('Each column of this format, with its own title. Untick columns you do not need. 「意味」 links a column to a standard item so it is checked and totalled; other columns are kept and shown as they are.') }}</p>
             @error('columns') <div class="flash error">{{ $message }}</div> @enderror
+            @if ($settings['columns'] === [])
+                <div class="flash error">{{ __('No table with one row per day was found in this file, so there are no columns to set. Check that the file is an attendance sheet with a text layer (not a scan).') }}</div>
+            @endif
             <div class="card column-list">
                 @foreach ($settings['columns'] as $i => $c)
                     <div class="row-item column-row">

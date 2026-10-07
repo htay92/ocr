@@ -21,6 +21,11 @@ class PdfTableParser
 {
     private const DAY_ROW = '/^\d{1,2}\/\d{1,2}(\((月|火|水|木|金|土|日)\))?$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$|^\d{1,2}日?$/u';
 
+    private const MONTH = '/(\d{4})\s?年\s?(\d{1,2})\s?月/u';
+
+    /** Labels of the employee's name in a block above the table. */
+    private const NAME_LABELS = ['氏名', '名前', '社員名', '従業員名'];
+
     private const DATES = '/(\d{4})\s?[年\/\-.]\s?(\d{1,2})\s?[月\/\-.]\s?(\d{1,2})日?/u';
 
     private readonly Template $template;
@@ -55,17 +60,24 @@ class PdfTableParser
     }
 
     /**
-     * Words grouped into lines (same baseline), left to right.
+     * Words grouped into lines, left to right. Words of one table row can sit a
+     * few points apart (another font for the times), so a word joins a line when
+     * its vertical centre is within half a word height of the line's centre.
+     * Numbers printed with an accounting format ("8.0)", "1)") lose the ")".
      *
      * @return list<list<array>>
      */
     public static function lines(array $words): array
     {
-        usort($words, fn ($a, $b) => [$a[2], $a[1]] <=> [$b[2], $b[1]]);
+        $centre = fn (array $w) => ($w[2] + $w[4]) / 2;
+        $words = array_map(fn ($w) => [preg_replace('/^(\d+(?:\.\d+)?)\)$/u', '$1', $w[0]), ...array_slice($w, 1)], $words);
+        usort($words, fn ($a, $b) => [$centre($a), $a[1]] <=> [$centre($b), $b[1]]);
         $lines = [];
         foreach ($words as $word) {
             $last = array_key_last($lines);
-            if ($last !== null && abs($lines[$last][0][2] - $word[2]) <= 2.0) {
+            $first = $last === null ? null : $lines[$last][0];
+            $tolerance = $first === null ? 0 : max(2.0, min($first[4] - $first[2], $word[4] - $word[2]) / 2);
+            if ($first !== null && abs($centre($first) - $centre($word)) <= $tolerance) {
                 $lines[$last][] = $word;
             } else {
                 $lines[] = [$word];
@@ -89,18 +101,6 @@ class PdfTableParser
         $t = $this->template;
         $lines = self::lines($words);
 
-        // Title: the line with the marker → employee name (text after the marker, up to "_" or the first date) and period.
-        $title = collect($lines)->map(fn ($line) => implode(' ', array_column($line, 0)))
-            ->first(fn ($text) => $t->titleMarker !== null && $t->titleMarker !== '' && str_contains($text, $t->titleMarker));
-        if ($title === null || preg_match_all(self::DATES, $title, $dates, PREG_SET_ORDER) < 2) {
-            throw new ProcessingException('E-IMP-02', __('The title ":marker" with the employee name and period was not found.', ['marker' => $t->titleMarker]));
-        }
-        $start = sprintf('%04d-%02d-%02d', $dates[0][1], $dates[0][2], $dates[0][3]);
-        $end = sprintf('%04d-%02d-%02d', $dates[1][1], $dates[1][2], $dates[1][3]);
-        $year = (int) $dates[0][1];
-        $afterMarker = substr($title, strpos($title, $t->titleMarker) + strlen($t->titleMarker));
-        $name = trim(preg_replace('/\s+/u', ' ', preg_split('/_|'.trim(self::DATES, '/u').'/u', $afterMarker)[0]));
-
         // Table header: the line holding most of the template's column titles.
         $titles = array_column($t->columns, 'title');
         $header = null;
@@ -114,6 +114,9 @@ class PdfTableParser
         if ($header === null) {
             throw new ProcessingException('E-IMP-02', __('The table header (:titles) was not found.', ['titles' => implode(', ', array_slice($titles, 0, 4))]));
         }
+
+        [$name, $start, $end] = $this->periodAndName($lines, $header);
+        $year = (int) substr($start, 0, 4);
         $totalsLine = $t->totalsLabel ? self::findLine($lines, fn ($texts) => in_array($t->totalsLabel, $texts, true), $header) : null;
 
         // Summary blocks above the table: label row → value row.
@@ -149,12 +152,13 @@ class PdfTableParser
                 $cells[$key] = isset($cells[$key]) ? $cells[$key].' '.$text : $text;
             }
             $dateText = $cells[$dateColumn['key'] ?? ''] ?? '';
-            if (! preg_match(self::DAY_ROW, $dateText)) {
+            $dateWord = explode(' ', $dateText)[0];                       // "1 土": the weekday can share the date column
+            if (! preg_match(self::DAY_ROW, $dateWord)) {
                 continue;
             }
-            $date = ($dateColumn['role'] ?? null) === 'work_day' && ($day = CellValue::day($dateText)) !== null
+            $date = ($dateColumn['role'] ?? null) === 'work_day' && ($day = CellValue::day($dateWord)) !== null
                 ? sprintf('%s-%02d', substr($start, 0, 7), $day)
-                : TimeValue::date($dateText, $year);
+                : TimeValue::date($dateWord, $year);
             if ($date === null) {
                 $warnings[] = __('Row :row: the date :value cannot be read.', ['row' => count($records) + 1, 'value' => $dateText]);
 
@@ -192,6 +196,58 @@ class PdfTableParser
         );
     }
 
+    /**
+     * Employee name and period: from the title marker line ("【勤務データ】山田 花子_2026年10月1日~2026年10月31日"),
+     * or, for a format without one, from a "2025年11月(度)" line (the whole month) and a 氏名 / 名前 label above the table.
+     *
+     * @return array{0: string, 1: string, 2: string}
+     *
+     * @throws ProcessingException
+     */
+    private function periodAndName(array $lines, int $header): array
+    {
+        $t = $this->template;
+        $texts = array_map(fn ($line) => implode(' ', array_column($line, 0)), array_slice($lines, 0, $header));
+
+        if ($t->titleMarker !== null && $t->titleMarker !== '') {
+            $title = collect($texts)->first(fn ($text) => str_contains($text, $t->titleMarker));
+            if ($title === null || preg_match_all(self::DATES, $title, $dates, PREG_SET_ORDER) < 2) {
+                throw new ProcessingException('E-IMP-02', __('The title ":marker" with the employee name and period was not found.', ['marker' => $t->titleMarker]));
+            }
+            $afterMarker = substr($title, strpos($title, $t->titleMarker) + strlen($t->titleMarker));
+
+            return [
+                trim(preg_replace('/\s+/u', ' ', preg_split('/_|'.trim(self::DATES, '/u').'/u', $afterMarker)[0])),
+                sprintf('%04d-%02d-%02d', $dates[0][1], $dates[0][2], $dates[0][3]),
+                sprintf('%04d-%02d-%02d', $dates[1][1], $dates[1][2], $dates[1][3]),
+            ];
+        }
+
+        $month = collect($texts)->map(fn ($text) => preg_match(self::MONTH, $text, $m) ? [(int) $m[1], (int) $m[2]] : null)->filter()->first();
+        if ($month === null || ! checkdate($month[1], 1, $month[0])) {
+            throw new ProcessingException('E-IMP-02', __('The year and month (e.g. 2025年11月) were not found above the table.'));
+        }
+        $start = sprintf('%04d-%02d-01', ...$month);
+
+        return [$this->nameBelowLabel(array_slice($lines, 0, $header)), $start, date('Y-m-t', strtotime($start))];
+    }
+
+    /** The word under a 氏名 / 名前 label (the nearest one in the next line), or "". */
+    private function nameBelowLabel(array $lines): string
+    {
+        foreach ($lines as $i => $line) {
+            foreach ($line as [$text, $x]) {
+                if (in_array($text, self::NAME_LABELS, true) && isset($lines[$i + 1])) {
+                    $value = collect($lines[$i + 1])->sortBy(fn ($w) => abs($w[1] - $x))->first();
+
+                    return $value !== null && abs($value[1] - $x) < 30 ? $value[0] : '';
+                }
+            }
+        }
+
+        return '';
+    }
+
     private function record(string $date, array $cells, int $row, string $dateText): ParsedRecord
     {
         $values = [];
@@ -208,6 +264,11 @@ class PdfTableParser
         };
         $minutes = fn (string $role) => $this->template->has($role) ? ($get($role) ?? 0) : null;
 
+        $break = $minutes('break_minutes');
+        if (! $this->template->has('break_minutes') && $get('start_time') !== null && $get('end_time') !== null && $this->template->breakDefault !== null) {
+            $break = $this->template->breakDefault;                          // the format has no break column
+        }
+
         $word = $get('work_type');
         $workType = $word === null ? null : (array_key_exists($word, $this->template->workTypes) ? $this->template->workTypes[$word] : $word);
 
@@ -216,7 +277,7 @@ class PdfTableParser
             workType: $workType,
             start: $get('start_time'),
             end: $get('end_time'),
-            breakMinutes: $minutes('break_minutes'),
+            breakMinutes: $break,
             workedMinutes: $minutes('worked_minutes'),
             overtimeMinutes: $minutes('overtime_minutes'),
             lateNightMinutes: $minutes('late_night_minutes'),
@@ -255,7 +316,8 @@ class PdfTableParser
         foreach ($lines as $i => $line) {
             $words = array_values(array_filter($line, fn ($w) => $w[0] !== $totals));
             $labels = array_values(array_filter($words, fn ($w) => in_array($w[0], $known, true)));
-            if ($labels === [] || count($labels) !== count($words) || ! isset($lines[$i + 1])) {
+            $hasNumbers = collect($words)->contains(fn ($w) => preg_match('/\d/u', $w[0]));
+            if ($labels === [] || $hasNumbers || count($labels) * 2 < count($words) || ! isset($lines[$i + 1])) {
                 continue;
             }
             foreach ($lines[$i + 1] as [$value, $x]) {

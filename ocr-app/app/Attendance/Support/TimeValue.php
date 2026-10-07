@@ -61,10 +61,10 @@ final class TimeValue
         return checkdate($mo, $d, $y) ? sprintf('%04d-%02d-%02d', $y, $mo, $d) : null;
     }
 
-    /** The weekday printed in "10/1(木)", or null. */
+    /** The weekday printed in "10/1(木)" or "1 木", or null. */
     public static function printedWeekday(?string $value): ?string
     {
-        return preg_match('/\((月|火|水|木|金|土|日)\)/u', self::clean($value), $m) ? $m[1] : null;
+        return preg_match('/\((月|火|水|木|金|土|日)\)|\s(月|火|水|木|金|土|日)$/u', self::clean($value), $m) ? ($m[1] ?: $m[2]) : null;
     }
 
     public static function format(int $minutes): string

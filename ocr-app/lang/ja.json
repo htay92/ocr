@@ -349,5 +349,7 @@
     "No template fitted this file, so the new template \":name\" was made from it and saved. Check the reading below.": "このファイルに合うテンプレートがなかったため、ファイルから新しいテンプレート「:name」を作成して自動保存しました。下の読み取り結果を確認してください。",
     "Check or edit the template": "テンプレートを確認・編集",
     "Delete the template \":name\" and set it up by hand?": "テンプレート「:name」を削除して、手動で設定しますか？",
-    "Delete it and set up by hand": "削除して手動で作成"
+    "Delete it and set up by hand": "削除して手動で作成",
+    "No table with one row per day was found in this file, so there are no columns to set. Check that the file is an attendance sheet with a text layer (not a scan).": "このファイルから1日1行の表が見つからなかったため、設定できる列がありません。テキスト情報を含む勤怠ファイル（スキャン画像ではないもの）か確認してください。",
+    "The year and month (e.g. 2025年11月) were not found above the table.": "表の上に年月（例：2025年11月）が見つかりません。"
 }
