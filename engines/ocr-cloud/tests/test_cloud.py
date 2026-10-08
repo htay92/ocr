@@ -96,3 +96,20 @@ def test_not_ready_without_a_key(monkeypatch):
     assert response.status_code == 503
     assert response.json()["message"] == "RuntimeError: GOOGLE_VISION_API_KEY is not set"
     main.app.state.error = None
+
+
+def test_a_large_page_is_sent_scaled_down_and_boxes_are_scaled_back(vision, monkeypatch):
+    import base64
+
+    import cv2
+    import numpy as np
+
+    monkeypatch.setattr(main, "MAX_SIDE", 1000)
+    requests = vision()
+    page = np.full((3000, 2000, 3), 255, np.uint8)
+
+    lines = main.recognize(main.app.state.model, page)
+
+    sent = cv2.imdecode(np.frombuffer(base64.b64decode(__import__("json").loads(requests[0].content)["requests"][0]["image"]["content"]), np.uint8), cv2.IMREAD_UNCHANGED)
+    assert max(sent.shape[:2]) == 1000 and sent.ndim == 2           # scaled down, grayscale
+    assert lines[0][2][0] == [60 * 3, 300 * 3]          # boxes back in the page's pixels
