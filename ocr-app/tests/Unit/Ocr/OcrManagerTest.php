@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Document;
 use App\Ocr\Engines\HttpOcrEngine;
-use App\Ocr\OcrException;
 use App\Ocr\OcrManager;
 use Illuminate\Support\Facades\Http;
 
@@ -30,11 +30,27 @@ it('rejects unknown and disabled engines', function (string $name, string $messa
     'cloud by default (NFR-09)' => ['cloud', 'disabled'],
 ]);
 
-it('refuses to run the cloud engine before it is implemented', function () {
+it('runs Google Cloud Vision as a contract container once enabled', function () {
     config(['ocr.engines.cloud.enabled' => true]);
+    Http::fake(['ocr-cloud:8000/ocr' => Http::response(ocrResponse(overrides: ['engine' => 'cloud']))]);
 
-    expect(fn () => app(OcrManager::class)->driver('cloud')->recognize(tempImage()))
-        ->toThrow(OcrException::class);
+    $engine = app(OcrManager::class)->driver('cloud');
+
+    expect($engine)->toBeInstanceOf(HttpOcrEngine::class)
+        ->and($engine->recognize(tempImage())->engine)->toBe('cloud');
+});
+
+it('leaves out the cloud engine once its monthly limit is used up', function () {
+    config(['ocr.engines.cloud.enabled' => true, 'ocr.engines.cloud.monthly_limit' => 2, 'ocr.fallback' => ['paddle', 'cloud']]);
+    $document = Document::factory()->create();
+    $document->ocrRuns()->create(['engine' => 'cloud', 'lines' => []]);
+    $document->ocrRuns()->create(['engine' => 'cloud', 'error_code' => 'engine_error']);   // failed runs do not count
+    $this->travelTo(now()->subMonth(), fn () => $document->ocrRuns()->create(['engine' => 'cloud', 'lines' => []]));
+
+    expect(app(OcrManager::class)->fallbackOrder())->toBe(['paddle', 'cloud']);
+
+    $document->ocrRuns()->create(['engine' => 'cloud', 'lines' => []]);
+    expect(app(OcrManager::class)->fallbackOrder())->toBe(['paddle']);
 });
 
 it('orders fallback engines from the default, without duplicates or disabled ones', function () {

@@ -1,0 +1,3 @@
+# Compose variables, including the Google Cloud Vision API key
+.env
+.DS_Store

@@ -2,8 +2,8 @@
 
 namespace App\Ocr;
 
+use App\Models\OcrRun;
 use App\Ocr\Contracts\OcrEngine;
-use App\Ocr\Engines\CloudOcrEngine;
 use App\Ocr\Engines\HttpOcrEngine;
 use Illuminate\Support\Manager;
 use InvalidArgumentException;
@@ -21,8 +21,8 @@ class OcrManager extends Manager
     }
 
     /**
-     * Engines to try in order: the default first, then OCR_FALLBACK,
-     * without duplicates or disabled engines.
+     * Engines to try in order: the default first, then OCR_FALLBACK, without
+     * duplicates, disabled engines, or engines whose monthly limit is used up.
      *
      * @return list<string>
      */
@@ -30,7 +30,19 @@ class OcrManager extends Manager
     {
         $names = array_unique([$this->getDefaultDriver(), ...$this->config->get('ocr.fallback', [])]);
 
-        return array_values(array_filter($names, fn (string $name) => (bool) $this->config->get("ocr.engines.{$name}.enabled")));
+        return array_values(array_filter($names, fn (string $name) => (bool) $this->config->get("ocr.engines.{$name}.enabled")
+            && ! $this->monthlyLimitReached($name)));
+    }
+
+    /** A paid engine's successful runs this month have reached ocr.engines.{name}.monthly_limit. */
+    public function monthlyLimitReached(string $name): bool
+    {
+        $limit = $this->config->get("ocr.engines.{$name}.monthly_limit");
+        if ($limit === null) {
+            return false;
+        }
+
+        return OcrRun::where('engine', $name)->whereNull('error_code')->where('created_at', '>=', now()->startOfMonth())->count() >= (int) $limit;
     }
 
     /**
@@ -65,7 +77,6 @@ class OcrManager extends Manager
                 retries: (int) $this->config->get('ocr.retries'),
                 backoff: $this->config->get('ocr.backoff'),
             ),
-            'cloud' => new CloudOcrEngine,
             default => throw new InvalidArgumentException("OCR engine [{$driver}] has an unknown driver."),
         };
     }

@@ -15,6 +15,8 @@ ENGINE = main.app.state.engine
 
 @pytest.fixture(scope="module")
 def client():
+    if getattr(main, "SKIP_LIVE_TESTS", None):  # e.g. a cloud engine without its API key
+        pytest.skip(main.SKIP_LIVE_TESTS)
     if main.app.state.model is None:
         main.app.state.load_model()
     assert main.app.state.error is None, main.app.state.error

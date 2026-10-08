@@ -58,10 +58,15 @@ return [
             'enabled' => env('OCR_NDL_ENABLED', true),
         ],
 
-        // Paid cloud OCR; off unless explicitly enabled (NFR-09).
+        // Google Cloud Vision (container ocr-cloud, compose profile "cloud"); images leave the
+        // machine, so off unless explicitly enabled (NFR-09). The API key lives in ocr/.env, not here.
+        // monthly_limit: uploads stop using it after this many successful runs in a calendar
+        // month (Vision is free for the first 1,000 images a month).
         'cloud' => [
-            'driver' => 'cloud',
+            'driver' => 'http',
+            'url' => env('OCR_CLOUD_URL', 'http://ocr-cloud:8000'),
             'enabled' => env('OCR_CLOUD_ENABLED', false),
+            'monthly_limit' => (int) env('OCR_CLOUD_MONTHLY_LIMIT', 1000),
         ],
 
     ],

@@ -92,6 +92,25 @@ services:
       start_period: 60s
       retries: 10
 
+  ocr-cloud:
+    # Optional Google Cloud Vision engine (NFR-09: images leave the machine). Not started by default:
+    #   docker compose --profile cloud up -d ocr-cloud
+    # The key comes from ocr/.env (git-ignored); only this container sees it.
+    profiles: ["cloud"]
+    build:
+      context: engines
+      dockerfile: ocr-cloud/Dockerfile
+    image: ocr-cloud
+    environment:
+      GOOGLE_VISION_API_KEY: ${GOOGLE_VISION_API_KEY:-}
+    # No ports: reachable only on the internal network (spec 2.1).
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
 volumes:
   pgdata:
   redisdata:
