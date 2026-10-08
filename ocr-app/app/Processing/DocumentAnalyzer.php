@@ -24,6 +24,35 @@ class DocumentAnalyzer
 
     public function analyse(Document $document, OcrRun $run): Analysis
     {
+        $analysis = $this->evaluate($run, $document->id);
+        if ($analysis->extracted === null) {
+            return $analysis;
+        }
+
+        $run->validationResults()->delete();
+        foreach ($analysis->results as $result) {
+            if ($result->level !== RuleResult::SKIPPED) {
+                $run->validationResults()->create([
+                    'document_id' => $document->id,
+                    'rule_code' => $result->code,
+                    'level' => $result->level,
+                    'message' => mb_strimwidth($result->message, 0, 255, '…'),
+                ]);
+            }
+        }
+
+        $run->update(['critical_failures' => $analysis->criticalFailures(), 'extracted' => $analysis->extracted->toArray()]);
+
+        return $analysis;
+    }
+
+    /**
+     * Classify, extract and validate without saving anything (also used by ocr:compare).
+     *
+     * @param  ?int  $documentId  the document itself, left out of the duplicate check (V-10)
+     */
+    public function evaluate(OcrRun $run, ?int $documentId = null): Analysis
+    {
         $type = $this->classifier->classify($run->text());
 
         // Attendance sheets are parsed by the attendance importer (milestone 6); other documents have no fields.
@@ -36,25 +65,10 @@ class DocumentAnalyzer
             $extracted,
             $type,
             $run->avg_confidence === null ? null : (float) $run->avg_confidence,
-            $document->id,
+            $documentId,
         ));
 
-        $run->validationResults()->delete();
-        foreach ($results as $result) {
-            if ($result->level !== RuleResult::SKIPPED) {
-                $run->validationResults()->create([
-                    'document_id' => $document->id,
-                    'rule_code' => $result->code,
-                    'level' => $result->level,
-                    'message' => mb_strimwidth($result->message, 0, 255, '…'),
-                ]);
-            }
-        }
-
-        $analysis = new Analysis($run, $type, $extracted, $results);
-        $run->update(['critical_failures' => $analysis->criticalFailures(), 'extracted' => $extracted->toArray()]);
-
-        return $analysis;
+        return new Analysis($run, $type, $extracted, $results);
     }
 
     /**

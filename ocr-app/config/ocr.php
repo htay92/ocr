@@ -6,9 +6,11 @@
 | Every engine with driver "http" is a container implementing the OCR contract
 | (spec 3.2), so adding an engine is a new container plus an entry here (NFR-10).
 |
-| Timeouts must nest. Worst case per engine: (1 + retries) x timeout + backoff
-| = 4 x 60 s + 130 s = 370 s; two engines = 740 s. That stays below the worker
-| --timeout (900 s), which stays below REDIS_QUEUE_RETRY_AFTER (960 s).
+| Timeouts must nest. Worst case per engine: (1 + retries) x timeout + backoff.
+| Defaults: 4 x 60 s + 130 s = 370 s; paddle + ndl = 740 s. Development (slow
+| emulated paddle): OCR_TIMEOUT=200, OCR_RETRIES=1 -> 2 x 200 s + 10 s = 410 s;
+| two engines = 820 s. Both stay below the worker --timeout (900 s), which stays
+| below REDIS_QUEUE_RETRY_AFTER (960 s). A third engine needs smaller values.
 */
 
 return [
@@ -49,11 +51,11 @@ return [
             'enabled' => env('OCR_PADDLE_ENABLED', true),
         ],
 
-        // Light fallback engine (NDLOCR-Lite); enable once its container exists.
+        // Light fallback engine (NDLOCR-Lite, container ocr-ndl), tried when paddle fails a critical check.
         'ndl' => [
             'driver' => 'http',
             'url' => env('OCR_NDL_URL', 'http://ocr-ndl:8000'),
-            'enabled' => env('OCR_NDL_ENABLED', false),
+            'enabled' => env('OCR_NDL_ENABLED', true),
         ],
 
         // Paid cloud OCR; off unless explicitly enabled (NFR-09).

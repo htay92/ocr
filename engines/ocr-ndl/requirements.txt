@@ -1,0 +1,24 @@
+# NDLOCR-Lite runtime (from its requirements.txt at the pinned commit; GUI and PDF-output packages left out)
+onnxruntime==1.26.0
+numpy==2.2.2
+opencv-python-headless==4.11.0.86
+PyYAML==6.0.1
+lxml==5.4.0
+networkx==3.3
+ordered-set==4.1.0
+pyparsing==3.1.2
+dill==0.3.8
+tqdm==4.66.4
+protobuf==6.31.1
+pypdf==6.4.0
+reportlab==4.2.5
+# The contract server and shared preprocessing (same versions as ocr-paddle)
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+pillow==12.3.0
+pillow-heif==1.8.0
+pypdfium2==5.14.0
+pytest==8.4.2
+httpx==0.28.1
+jsonschema==4.26.0

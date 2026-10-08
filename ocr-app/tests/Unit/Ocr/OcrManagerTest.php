@@ -26,7 +26,7 @@ it('rejects unknown and disabled engines', function (string $name, string $messa
         ->toThrow(InvalidArgumentException::class, $message);
 })->with([
     'unknown' => ['abbyy', 'not configured'],
-    'ndl until its container exists' => ['ndl', 'disabled'],
+    'ndl when OCR_NDL_ENABLED=false' => ['ndl', 'disabled'],
     'cloud by default (NFR-09)' => ['cloud', 'disabled'],
 ]);
 

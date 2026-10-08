@@ -134,7 +134,7 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
                     continue;
                 }
 
-                $run = $document->ocrRuns()->create($this->runAttributes($name, $results));
+                $run = $document->ocrRuns()->create(OcrRun::attributesFrom($name, $results));
                 $this->saveImages($document, $run, $results);
                 $analysis = $this->analyzer->analyse($document, $run);
 
@@ -164,29 +164,6 @@ class ProcessDocumentJob implements ShouldBeUnique, ShouldQueue
                 $rasterizer->cleanup($pages);
             }
         }
-    }
-
-    /**
-     * Merge the per-page results of one engine into one run.
-     *
-     * @param  list<OcrResult>  $results
-     */
-    private function runAttributes(string $engine, array $results): array
-    {
-        $lines = [];
-        foreach ($results as $page => $result) {
-            foreach ($result->lines as $line) {
-                $lines[] = ['text' => $line->text, 'confidence' => $line->confidence, 'bbox' => $line->bbox, 'page' => $page + 1];
-            }
-        }
-
-        return [
-            'engine' => $engine,
-            'engine_version' => $results[0]->engineVersion,
-            'lines' => $lines,
-            'avg_confidence' => $lines === [] ? null : array_sum(array_column($lines, 'confidence')) / count($lines),
-            'elapsed_ms' => array_sum(array_map(fn (OcrResult $result) => $result->elapsedMs, $results)),
-        ];
     }
 
     /**

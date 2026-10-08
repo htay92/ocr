@@ -60,7 +60,10 @@ services:
       - redisdata:/data
 
   ocr-paddle:
-    build: engines/ocr-paddle
+    # Context engines/: every engine shares common/ (preprocessing, contract server, contract tests).
+    build:
+      context: engines
+      dockerfile: ocr-paddle/Dockerfile
     image: ocr-paddle
     # PaddlePaddle's linux/arm64 CPU build segfaults on model load,
     # so on Apple Silicon this runs the x86 build under emulation.
@@ -73,6 +76,20 @@ services:
       interval: 15s
       timeout: 5s
       start_period: 120s
+      retries: 10
+
+  ocr-ndl:
+    # Fallback engine (NDLOCR-Lite, ONNX Runtime on the CPU). Runs natively on arm64 and x86_64.
+    build:
+      context: engines
+      dockerfile: ocr-ndl/Dockerfile
+    image: ocr-ndl
+    # No ports: reachable only on the internal network (spec 2.1).
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
       retries: 10
 
 volumes:

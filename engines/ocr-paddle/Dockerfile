@@ -11,7 +11,8 @@ ENV PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
-COPY requirements.txt .
+# Build context: engines/ (shared preprocessing, server and contract tests in common/).
+COPY ocr-paddle/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download the PP-OCRv5 models at build time, not on the first request.
@@ -19,10 +20,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(lang='japan', ocr_version='PP-OCRv5', \
     use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=True)"
 
-COPY main.py preprocess.py ./
+COPY common/preprocess.py common/server.py ocr-paddle/main.py ./
 
-COPY pytest.ini .
-COPY tests/ tests/
+COPY common/pytest.ini .
+COPY common/tests/ tests/
+COPY ocr-paddle/tests/ tests/
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

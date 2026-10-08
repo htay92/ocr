@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Ocr\Data\OcrResult;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -28,6 +29,29 @@ class OcrRun extends Model
             'extracted' => 'array',
             'images' => 'array',
             'avg_confidence' => 'decimal:3',
+        ];
+    }
+
+    /**
+     * Attributes of one engine's run from its per-page results, merged into one list of lines.
+     *
+     * @param  list<OcrResult>  $results
+     */
+    public static function attributesFrom(string $engine, array $results): array
+    {
+        $lines = [];
+        foreach ($results as $page => $result) {
+            foreach ($result->lines as $line) {
+                $lines[] = ['text' => $line->text, 'confidence' => $line->confidence, 'bbox' => $line->bbox, 'page' => $page + 1];
+            }
+        }
+
+        return [
+            'engine' => $engine,
+            'engine_version' => $results[0]->engineVersion,
+            'lines' => $lines,
+            'avg_confidence' => $lines === [] ? null : array_sum(array_column($lines, 'confidence')) / count($lines),
+            'elapsed_ms' => array_sum(array_map(fn (OcrResult $result) => $result->elapsedMs, $results)),
         ];
     }
 

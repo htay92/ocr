@@ -1,4 +1,4 @@
-"""POST /ocr against the spec 3.2 contract, with the real PaddleOCR model."""
+"""POST /ocr against the spec 3.2 contract, with the engine's real model (the same tests for every engine)."""
 
 import base64
 
@@ -10,11 +10,14 @@ import main
 from conftest import assert_schema, receipt_image, to_bytes
 
 
+ENGINE = main.app.state.engine
+
+
 @pytest.fixture(scope="module")
 def client():
-    if main.state["ocr"] is None:
-        main.load_model()
-    assert main.state["error"] is None, main.state["error"]
+    if main.app.state.model is None:
+        main.app.state.load_model()
+    assert main.app.state.error is None, main.app.state.error
     return TestClient(main.app)
 
 
@@ -28,7 +31,8 @@ def test_reads_a_receipt_in_the_contract_shape(client, receipt_png):
     assert response.status_code == 200
     body = response.json()
     assert_schema(body, "response")
-    assert body["engine"] == "paddle"
+    assert body["engine"] == ENGINE.name
+    assert body["engine_version"] == ENGINE.version
     assert body["preprocessed_image"] is None
 
     text = "\n".join(line["text"] for line in body["lines"])
@@ -84,11 +88,10 @@ def test_missing_file_is_an_invalid_image(client):
 
 
 def test_engine_error_is_reported(client, receipt_png, monkeypatch):
-    class Broken:
-        def predict(self, _image):
-            raise RuntimeError("boom")
+    def broken(_model, _image):
+        raise RuntimeError("boom")
 
-    monkeypatch.setitem(main.state, "ocr", Broken())
+    monkeypatch.setattr(ENGINE, "recognize", broken)
     response = post(client, receipt_png)
 
     assert response.status_code == 500
@@ -96,7 +99,7 @@ def test_engine_error_is_reported(client, receipt_png, monkeypatch):
 
 
 def test_not_ready_while_the_model_loads(client, receipt_png, monkeypatch):
-    monkeypatch.setitem(main.state, "ocr", None)
+    monkeypatch.setattr(main.app.state, "model", None)
     response = post(client, receipt_png)
 
     assert response.status_code == 503
