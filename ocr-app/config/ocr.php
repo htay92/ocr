@@ -34,6 +34,9 @@ return [
     // V-09: lines below this average confidence are flagged (spec 3.5, 3.6).
     'confidence_min' => (float) env('OCR_CONFIDENCE_MIN', 0.80),
 
+    // V-11: an uploaded image whose long side is shorter than this is flagged as too small to read reliably.
+    'min_image_side' => (int) env('OCR_MIN_IMAGE_SIDE', 1000),
+
     // Address of this app on the home Wi-Fi (http://<Mac IP>:8080), shown as a QR code
     // on the upload page so a phone can open it. The IP can change after reconnecting.
     'phone_url' => env('PHONE_URL'),

@@ -9,6 +9,7 @@ use App\Models\Receipt;
 use App\Validation\ReceiptValidator;
 use App\Validation\RuleResult;
 use App\Validation\ValidationContext;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Spec 2.4 steps 5–7 for one OCR run: classify, extract, validate. Results are
@@ -24,7 +25,7 @@ class DocumentAnalyzer
 
     public function analyse(Document $document, OcrRun $run): Analysis
     {
-        $analysis = $this->evaluate($run, $document->id);
+        $analysis = $this->evaluate($run, $document->id, self::imageSize($document));
         if ($analysis->extracted === null) {
             return $analysis;
         }
@@ -50,8 +51,9 @@ class DocumentAnalyzer
      * Classify, extract and validate without saving anything (also used by ocr:compare).
      *
      * @param  ?int  $documentId  the document itself, left out of the duplicate check (V-10)
+     * @param  ?array{0: int, 1: int}  $imageSize  the uploaded image's width and height (V-11)
      */
-    public function evaluate(OcrRun $run, ?int $documentId = null): Analysis
+    public function evaluate(OcrRun $run, ?int $documentId = null, ?array $imageSize = null): Analysis
     {
         $type = $this->classifier->classify($run->text());
 
@@ -66,6 +68,7 @@ class DocumentAnalyzer
             $type,
             $run->avg_confidence === null ? null : (float) $run->avg_confidence,
             $documentId,
+            $imageSize,
         ));
 
         return new Analysis($run, $type, $extracted, $results);
@@ -92,5 +95,21 @@ class DocumentAnalyzer
             'selected_run_id' => $analysis->run->id,
             ...$attributes,
         ]);
+    }
+
+    /**
+     * Width and height of an uploaded image (V-11); null for PDFs (rendered at 300 dpi) and other files.
+     *
+     * @return ?array{0: int, 1: int}
+     */
+    public static function imageSize(Document|string $file): ?array
+    {
+        $path = $file instanceof Document ? Storage::disk('local')->path($file->file_path) : $file;
+        if (! is_file($path) || ! str_starts_with((string) (mime_content_type($path) ?: ''), 'image/')) {
+            return null;
+        }
+        $size = @getimagesize($path);
+
+        return $size === false ? null : [(int) $size[0], (int) $size[1]];
     }
 }

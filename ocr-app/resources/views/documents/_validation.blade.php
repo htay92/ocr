@@ -1,4 +1,4 @@
-{{-- Results of V-01..V-10 for the selected run (spec 3.5). Critical first. --}}
+{{-- Results of V-01..V-11 for the selected run (spec 3.5). Critical first. --}}
 @php
     use App\Support\Labels;
     $order = ['critical' => 0, 'warning' => 1, 'pass' => 2];

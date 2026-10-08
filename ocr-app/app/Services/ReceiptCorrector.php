@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Extraction\Data\ExtractedDocument;
 use App\Models\Document;
 use App\Models\Receipt;
+use App\Processing\DocumentAnalyzer;
 use App\Validation\ReceiptValidator;
 use App\Validation\RuleResult;
 use App\Validation\ValidationContext;
@@ -99,6 +100,7 @@ class ReceiptCorrector
             $document->type,
             $run?->avg_confidence === null ? null : (float) $run->avg_confidence,
             $document->id,
+            DocumentAnalyzer::imageSize($document),
         ));
 
         $document->validationResults()->whereNull('ocr_run_id')->whereNull('attendance_sheet_id')->delete();

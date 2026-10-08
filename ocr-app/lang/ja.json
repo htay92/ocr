@@ -351,5 +351,9 @@
     "Delete the template \":name\" and set it up by hand?": "テンプレート「:name」を削除して、手動で設定しますか？",
     "Delete it and set up by hand": "削除して手動で作成",
     "No table with one row per day was found in this file, so there are no columns to set. Check that the file is an attendance sheet with a text layer (not a scan).": "このファイルから1日1行の表が見つからなかったため、設定できる列がありません。テキスト情報を含む勤怠ファイル（スキャン画像ではないもの）か確認してください。",
-    "The year and month (e.g. 2025年11月) were not found above the table.": "表の上に年月（例：2025年11月）が見つかりません。"
+    "The year and month (e.g. 2025年11月) were not found above the table.": "表の上に年月（例：2025年11月）が見つかりません。",
+    "No image (read without OCR)": "画像なし（OCRなしで読み取り）",
+    "Image size :width×:height px": "画像サイズ :width×:height px",
+    "The image is too small (:width×:height px). If text is misread, upload the original PDF or an image with a long side of at least :min px.": "画像が小さすぎます（:width×:height px）。文字が正しく読み取れない場合は、元のPDFか、長辺:min px以上の画像をアップロードしてください。",
+    "Image size": "画像サイズ"
 }

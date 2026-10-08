@@ -62,7 +62,7 @@ class OcrCompareCommand extends Command
                     continue;
                 }
 
-                $analysis = $analyzer->evaluate(new OcrRun(OcrRun::attributesFrom($engine, $results)));
+                $analysis = $analyzer->evaluate(new OcrRun(OcrRun::attributesFrom($engine, $results)), imageSize: DocumentAnalyzer::imageSize($file));
                 $marks = $this->marks($analysis, $expected[$name]['fields'] ?? null);
                 $critical = $analysis->criticalCodes();
 

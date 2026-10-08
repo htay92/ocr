@@ -430,7 +430,11 @@ class RuleExtractor implements Extractor
         }
 
         if ($found === []) {
-            return $type === DocumentClassifier::PAID_RECEIPT ? $this->yenDashAmount() : null;
+            return match ($type) {
+                DocumentClassifier::PAID_RECEIPT => $this->yenDashAmount(),
+                DocumentClassifier::INVOICE => $this->headlineYenAmount(),
+                default => null,
+            };
         }
 
         $lower = array_filter($found, fn ($value, $i) => $i >= count($this->rows) / 2, ARRAY_FILTER_USE_BOTH);
@@ -488,6 +492,26 @@ class RuleExtractor implements Extractor
         }
 
         return null;
+    }
+
+    /**
+     * Invoices print the amount due large in a 「ご請求金額」 box above the items. When
+     * no total label could be read (a small or blurred image), the largest row in
+     * the upper half that is only a yen amount ("¥119,800", "¥ 119,800-") is it.
+     */
+    private function headlineYenAmount(): ?int
+    {
+        $best = null;
+        foreach ($this->t as $i => $text) {
+            if ($i < count($this->t) / 2 && preg_match('/^\W{0,2}¥\s?(\d{1,3}(?:,\d{3})+|\d{4,})-?\W{0,2}$/u', $text, $m)) {
+                $amount = self::number($m[1]);
+                if ($best === null || $amount > $best[0]) {
+                    $best = [$amount, $i];
+                }
+            }
+        }
+
+        return $best === null ? null : $this->take('total', $best[1], $best[0]);
     }
 
     /**

@@ -3,7 +3,7 @@
 namespace App\Validation;
 
 /**
- * V-01..V-10 for receipts, invoices and paid receipts (spec 3.5).
+ * V-01..V-11 for receipts, invoices and paid receipts (spec 3.5).
  */
 class ReceiptValidator implements Validator
 {
@@ -19,6 +19,7 @@ class ReceiptValidator implements Validator
         Rules\LinesMatchTaxableAmounts::class,
         Rules\ConfidenceHighEnough::class,
         Rules\NotDuplicate::class,
+        Rules\ImageLargeEnough::class,
     ];
 
     public function validate(ValidationContext $context): array

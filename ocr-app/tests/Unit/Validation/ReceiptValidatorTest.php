@@ -127,5 +127,19 @@ it('counts only critical failures', function () {
     $results = (new ReceiptValidator)->validate(new ValidationContext(new ExtractedDocument(['total' => null]), 'receipt', 0.5));
 
     expect(RuleResult::criticalCount($results))->toBe(2)    // V-01 total, V-02 date
-        ->and(collect($results)->pluck('code')->all())->toBe(['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06', 'V-07', 'V-08', 'V-09', 'V-10']);
+        ->and(collect($results)->pluck('code')->all())->toBe(['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06', 'V-07', 'V-08', 'V-09', 'V-10', 'V-11']);
 });
+
+it('V-11: the image is large enough to read (warning)', function (?array $size, string $level) {
+    $results = (new ReceiptValidator)->validate(new ValidationContext(new ExtractedDocument(['total' => 1280]), 'invoice', 0.9, imageSize: $size));
+    $result = collect($results)->firstWhere('code', 'V-11');
+
+    expect($result->level)->toBe($level);
+    if ($level === 'warning') {
+        expect($result->message)->toContain('375×533');
+    }
+})->with([
+    'thumbnail' => [[375, 533], 'warning'],
+    'A4 at 150 dpi' => [[1240, 1754], 'pass'],
+    'no image (PDF text, spreadsheet)' => [null, 'skipped'],
+]);

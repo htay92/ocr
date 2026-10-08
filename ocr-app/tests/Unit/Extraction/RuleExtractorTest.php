@@ -348,3 +348,38 @@ it('stops reading receipt items at the total, before payment lines', function ()
 
     expect($doc->lines)->toBe([]);
 });
+
+// --- low-resolution invoice: the 「ご請求金額」 label is unreadable ---------------
+
+/** PaddleOCR on Tei's 375×533 px sample 請求書２: the big amount survives, its label and the 合計 row do not. */
+const SMALL_INVOICE_PADDLE = ['請求書', '责行日', '2023/1/1', '号', '0000000', '0000株式会社御中', '7 100-0000', '干代201-2002A', '株式会社',
+    'Fa10-0000', '二上げす', '注：支代', '全程（）', '发量：00-0000-0000', '￥119.800', 'C截行O支通口座23400', '达元', '….*0', '82年2', '手数料壮',
+    'B付', '内0', '车数量', '从', '单（）', '税', '金（）', '2022/12/1', 'AAAA', '式', '10.000', '00.000', '2002/12/15', '△△△△', '*', '8', '信',
+    '¥2,000', '8', 'w0,000', '校象', '小4', 'vira,00o', '区分', '调贯', '金税）', '消费积', 'V,800', '12%刘章', 'v5,000', '5020', '会计',
+    '1ta,000', '格刻象', '4,800', '*80200', '指为'];
+
+/** NDLOCR-Lite on the same file (it reads the yen sign as a backslash). */
+const SMALL_INVOICE_NDL = ['請求書', '○○○○株式会社御中', 'TO: 000', '東京都千代雜誌(1--------100', 'TIのAN、 IN申し上げます。', 'ござすます。',
+    '\119,800', 'as', 'CORTQOR WID CONDE', '1000', '111 mand', '● ●●株式会社', '}(120', '位成、 製稅額の稅物記念(〇〇〇〇〇', '12 (6-00-100',
+    '121-121', '試込手数料ほ部はのご負相にてお飼いいたします。', '%(11111111', 'en', '消費現', 'AN', 'BW', 'NMW', '202/12/15', '2242', 'AAAA',
+    'is', '****', '--', '35', '34', '11', '15', '******', '1,000', 'as', '14', '2,000', '16', '$8.830', '63,00', '00,000', 'asst', '200', 'ARE',
+    '1,0', '$6.830', '200', 'Mo', '*****', '300', '1,0000', '0.50', 'mm', 'ax'];
+
+it('takes an invoice total from the headline yen amount when the label is unreadable', function (array $lines) {
+    expect(extractText(implode("\n", $lines), 'invoice')->get('total'))->toBe(119800);
+})->with([
+    'paddle' => [SMALL_INVOICE_PADDLE],
+    'ndl' => [SMALL_INVOICE_NDL],
+]);
+
+it('still prefers the labelled invoice total', function () {
+    $doc = extractText("請求書\nご請求金額\n¥99,000\n品名 数量 金額\nA 1 ¥90,000\n小計 ¥90,000\n消費税 ¥9,000\n合計 ¥99,000", 'invoice');
+
+    expect($doc->get('total'))->toBe(99000);
+});
+
+it('does not take a lone yen amount from the lower half or on a receipt', function () {
+    $lowerHalf = "請求書\n株式会社A御中\n品名\n数量\n単価\n金額\nA\n1\n¥5,000\n振込先 B銀行";
+    expect(extractText($lowerHalf, 'invoice')->get('total'))->toBeNull()
+        ->and(extractText("ローソン\n2026年10月1日\n¥1,280\nおにぎり", 'receipt')->get('total'))->toBeNull();
+});

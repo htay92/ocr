@@ -31,7 +31,7 @@ final class Labels
         'V-01' => 'Total present', 'V-02' => 'Issue date valid', 'V-03' => 'Registration number',
         'V-04' => 'Lines add up', 'V-05' => 'Tax and total agree', 'V-06' => 'Tax matches rate',
         'V-07' => 'Change correct', 'V-08' => 'Lines per tax rate', 'V-09' => 'OCR confidence',
-        'V-10' => 'Duplicate check',
+        'V-10' => 'Duplicate check', 'V-11' => 'Image size',
     ];
 
     /** Receipt fields (spec 3.3) in display order. */
