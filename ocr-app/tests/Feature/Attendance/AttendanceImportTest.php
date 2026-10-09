@@ -135,12 +135,12 @@ it('imports the real 勤務データ PDF', function () {
     $pdf = new UploadedFile(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf'), 'kintai.pdf', 'application/pdf', null, true);
     $location = $this->post('/attendance/import', ['file' => $pdf])->headers->get('Location');
 
-    $this->get($location)->assertSee(['Htay Hlaing Kyaw', '168:00', 'スポーツの日']);
+    $this->get($location)->assertSee([samplePdfName(), '168:00', 'スポーツの日']);
     $this->post('/attendance/import/'.basename(parse_url($location, PHP_URL_PATH)))->assertSessionHas('status');
 
     expect(AttendanceSheet::sole()->only(['employee_name', 'scheduled_minutes', 'paid_leave_remaining_days']))
-        ->toBe(['employee_name' => 'Htay Hlaing Kyaw', 'scheduled_minutes' => 10080, 'paid_leave_remaining_days' => '26.0']);
-})->skip(fn () => ! hasPoppler() || ! is_file(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf')), 'needs poppler and the sample PDF');
+        ->toBe(['employee_name' => samplePdfName(), 'scheduled_minutes' => 10080, 'paid_leave_remaining_days' => '26.0']);
+})->skip(fn () => ! hasSamplePdf(), 'needs poppler, the sample PDF and its git-ignored .json');
 
 it('imports through the API, with a dry run first', function () {
     Sanctum::actingAs($this->user);

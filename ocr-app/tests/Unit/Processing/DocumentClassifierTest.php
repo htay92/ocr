@@ -17,6 +17,6 @@ it('classifies a document from its OCR text', function (string $text, string $ty
     // 様 / 御中 misread, but the "¥5,500-" amount style is only used on paid receipts.
     'paid receipt with misread 様' => ["領収書 日:2022年4月10\n山田太郎 绿\n¥5,500-\n籍代", 'paid_receipt'],
     'paid receipt with 合計金額 and misread 御中' => ["No.: 123456-123\n領収書\n式会社ル支社 中\n合計金額 ¥407,957,393-", 'paid_receipt'],
-    'attendance sheet' => ["【勤務データ】Htay Hlaing Kyaw_2026年10月1日~2026年10月31日\n勤務時間項目\n所定時間 労働時間", 'attendance'],
+    'attendance sheet' => ["【勤務データ】山田 花子_2026年10月1日~2026年10月31日\n勤務時間項目\n所定時間 労働時間", 'attendance'],
     'other' => ['会議メモ 10/6', 'other'],
 ]);

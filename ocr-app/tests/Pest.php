@@ -91,6 +91,19 @@ function hasPoppler(): bool
     return trim((string) shell_exec('command -v pdftotext')) !== '' && trim((string) shell_exec('command -v pdftoppm')) !== '';
 }
 
+/** The real 勤務データ sample PDF (git-ignored) and its expected values (git-ignored .json) are both present. */
+function hasSamplePdf(): bool
+{
+    return hasPoppler() && is_file(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf'))
+        && is_file(base_path('tests/fixtures/attendance/kintai-2026-10-sample.json'));
+}
+
+/** The employee name printed in the real sample PDF; kept out of git (CLAUDE.md: no personal data). */
+function samplePdfName(): string
+{
+    return json_decode((string) file_get_contents(base_path('tests/fixtures/attendance/kintai-2026-10-sample.json')), true)['employee_name'];
+}
+
 /**
  * OCR lines of a receipt that passes every critical check (V-01 total, V-02 date).
  *

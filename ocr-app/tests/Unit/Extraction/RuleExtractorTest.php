@@ -169,7 +169,7 @@ it('reads 様, an unlabelled ¥X- amount and a 但し split across lines', funct
     ]);
 });
 
-it('reads Tei\'s sample 領収書２ as PaddleOCR returned it', function () {
+it('reads the sample 領収書２ as PaddleOCR returned it', function () {
     $doc = extractText("領収書\nNo.\n123456\n株式会社\n御中\n金額\n￥123,456\n但し\n領収日\n2021年4月30日\n上記正に領収いたしました\n株式会社×××支店\n内訳\n亍000-0000\n県市×-×-×\n收入\n税抜金額\n印紙", 'paid_receipt');
 
     expect($doc->fields)->toMatchArray([

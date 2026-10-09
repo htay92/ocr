@@ -3,10 +3,10 @@
 use App\Attendance\Parsers\PdfTableParser;
 use App\Processing\ProcessingException;
 
-it('reads Tei\'s real 勤務データ PDF (an empty month)', function () {
+it('reads the real 勤務データ PDF (an empty month)', function () {
     $sheet = (new PdfTableParser)->parse(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf'));
 
-    expect($sheet->employeeName)->toBe('Htay Hlaing Kyaw')
+    expect($sheet->employeeName)->toBe(samplePdfName())
         ->and([$sheet->periodStart, $sheet->periodEnd])->toBe(['2026-10-01', '2026-10-31'])
         ->and($sheet->records)->toHaveCount(31)
         ->and($sheet->records[11]->date)->toBe('2026-10-12')
@@ -18,7 +18,7 @@ it('reads Tei\'s real 勤務データ PDF (an empty month)', function () {
         ->and($sheet->summary['work_type_counts'])->toMatchArray(['出勤' => 0, '有給休暇' => 0, '夏季休暇' => 0])
         ->and($sheet->fromFile('paid_leave_remaining_days'))->toBeTrue()
         ->and($sheet->totals)->toMatchArray(['scheduled' => 10080, 'worked' => 0, 'break' => 0]);
-})->skip(fn () => ! hasPoppler() || ! is_file(base_path('tests/fixtures/attendance/kintai-2026-10-sample.pdf')), 'needs poppler and the sample PDF');
+})->skip(fn () => ! hasSamplePdf(), 'needs poppler, the sample PDF and its git-ignored .json');
 
 it('reads a filled month from word positions', function () {
     $sheet = (new PdfTableParser)->parseWords(kintaiPdfWords());

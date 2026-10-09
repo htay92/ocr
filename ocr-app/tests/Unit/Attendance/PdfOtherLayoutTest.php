@@ -19,7 +19,7 @@ function sheetPdfWords(): array
     foreach ([['2025', 75.7], ['年', 109.7], ['11', 142.7], ['月度', 177.2], ['勤務表', 208.6], ['兼', 253.7], ['作業報告書', 271.5]] as [$text, $x]) {
         $word($text, $x, 60.6, 30, 13.7);
     }
-    foreach ([['名前', 77.4, 'テイ'], ['出勤日数（日）', 141.9, '3'], ['休日日数（日）', 233.4, '2'], ['稼働時間（時間）', 318.1, '24.3)'], ['精算時間（時間）', 400.0, '～']] as [$label, $x, $value]) {
+    foreach ([['名前', 77.4, '田中'], ['出勤日数（日）', 141.9, '3'], ['休日日数（日）', 233.4, '2'], ['稼働時間（時間）', 318.1, '24.3)'], ['精算時間（時間）', 400.0, '～']] as [$label, $x, $value]) {
         $word($label, $x, 100.5, 50);
         $word($value, $x + 5, 117.0);
     }
@@ -62,7 +62,7 @@ it('reads the PDF with that template: month from the title, name from 名前, ro
 
     $sheet = (new PdfTableParser(Template::fromProfile($profile)))->parseWords(sheetPdfWords());
 
-    expect($sheet->employeeName)->toBe('テイ')
+    expect($sheet->employeeName)->toBe('田中')
         ->and([$sheet->periodStart, $sheet->periodEnd])->toBe(['2025-11-01', '2025-11-30'])
         ->and($sheet->records)->toHaveCount(30)
         ->and($sheet->summary['worked_minutes'])->toBe(1458)                 // 24.3 h
