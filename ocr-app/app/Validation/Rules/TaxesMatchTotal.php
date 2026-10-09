@@ -7,7 +7,9 @@ use App\Validation\ValidationContext;
 
 /**
  * V-05 (critical when tax rows exist). Inclusive: sum of taxable amounts equals
- * the total. Exclusive: subtotal plus tax, minus withholding tax, equals the total.
+ * the total. Exclusive: subtotal plus tax, minus withholding tax, equals the total
+ * (or the taxable amounts plus tax, when a service charge is added after the subtotal).
+ * Charges outside consumption tax (宿泊税, 入湯税…) may make up the difference.
  */
 class TaxesMatchTotal extends Rule
 {
@@ -38,10 +40,18 @@ class TaxesMatchTotal extends Rule
                 if ($taxable === $total) {
                     return $this->pass(__('Taxable amounts :taxable = total :total', $values));
                 }
+                $nonTaxable = self::nonTaxable($doc->lines);
+                if ($nonTaxable > 0 && $taxable + $nonTaxable === $total) {
+                    return $this->pass(__('Taxable amounts :taxable + non-taxable :other = total :total', [...$values, 'other' => self::yen($nonTaxable)]));
+                }
                 $failures[] = __('Taxable amounts :taxable ≠ total :total', $values);
             } else {
                 $sum = $subtotal + $tax - $withholding;
                 $values = ['subtotal' => self::yen($subtotal), 'tax' => self::yen($tax), 'withholding' => self::yen($withholding), 'sum' => self::yen($sum), 'total' => self::yen($total)];
+                // A service charge sits between the subtotal and the taxable amount: taxable + tax counts too.
+                if ($sum !== $total && $taxable !== $subtotal && $taxable + $tax - $withholding === $total) {
+                    return $this->pass(__('Taxable amounts :taxable + tax :tax = total :total', ['taxable' => self::yen($taxable), 'tax' => self::yen($tax), 'total' => self::yen($total)]));
+                }
                 if ($sum === $total) {
                     return $this->pass($withholding
                         ? __('Subtotal :subtotal + tax :tax − withholding :withholding = total :total', $values)

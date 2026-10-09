@@ -34,6 +34,11 @@ class DocumentClassifier
         // (レジ, but not the レジ in クレジット).
         $till = preg_match('/お?預り|お?預かり|お?釣り?|おつり|釣銭|(?<!ク)レジ|点数|お買上/u', $t) === 1;
 
+        // Quotations are not processed (no 請求 on them).
+        if (preg_match('/見積書|御見積|お見積/u', $t) && ! preg_match('/請求/u', $t)) {
+            return self::OTHER;
+        }
+
         if (! $till && preg_match('/請求書|請求金額|御請求|ご請求/u', $t)) {
             return self::INVOICE;
         }
@@ -43,7 +48,8 @@ class DocumentClassifier
             return self::PAID_RECEIPT;
         }
 
-        if ($till || preg_match('/合計|小計/u', $t)) {
+        // Card slips (クレジット売上票, ご利用金額) count as till receipts.
+        if ($till || preg_match('/合計|小計|売上票|ご利用金額/u', $t)) {
             return self::RECEIPT;
         }
 

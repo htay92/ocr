@@ -24,7 +24,7 @@ class RuleExtractor implements Extractor
      * of a date, time, percentage, phone number, quantity or code ("4S1100",
      * "3F"), and never with a leading zero (account and slip numbers).
      */
-    private const AMOUNT = '/(?<![\d,.\/:\-A-Za-z])(¥)?(?!0\d)(?>(\d{1,3}(?:[,.] ?\d{3})+)|(\d+))(?![\d,]|\.\d|[A-SU-Za-z]|\s*(?:%|:|\/|年|月|日|点|個|名|件|式|-\d))/u';
+    private const AMOUNT = '/(?<![\d,.\/:\-A-Za-z])(¥)?(?!0\d)(?>(\d{1,3}(?:[,.] ?\d{3})+)|(\d+))(?![\d,]|\.\d|[A-SU-Za-z]|\s*(?:%|:|\/|年|月|日|時|分|秒|点|個|名|件|式|-\d))/u';
 
     private const DATE_START = '/^(\d{4}[年\/.\-])/u';
 
@@ -45,13 +45,17 @@ class RuleExtractor implements Extractor
     /** Row words that are never a line item. */
     private const NOT_ITEM = '/#\d|残高|ポイント|会員|利用可能|^No\.?\d|号:|^[^\d¥]{1,8}:\d|合計|小計|請求|金額|期限|期日|振込|口座|銀行|登録|TEL|電話|〒|番号|担当|件名|御中|様|消費税|対象|預|釣|点数|レジ|丁目|番地|源泉|内訳|税抜|税込|現金|クレジット|カード|支払|お買上|^Page\d+of\d+/u';
 
+    /** Rows whose percentage is not a consumption-tax rate. */
+    private const NOT_TAX_RATE = '/サービス|手数料|割引|値引|還元|ポイント|OFF|オフ/u';
+
     private const TOTAL_LABELS = [
         DocumentClassifier::RECEIPT => ['合計', '総合計', 'お買上計', 'お買上合計', 'お買上げ合計', '税込合計'],
-        DocumentClassifier::INVOICE => ['ご請求金額', '御請求金額', '請求金額', '合計', '総合計', '税込合計'],
+        DocumentClassifier::INVOICE => ['ご請求金額', '御請求金額', '請求金額', '今回ご請求額', 'ご請求額', '請求額', '合計', '総合計', '税込合計'],
         DocumentClassifier::PAID_RECEIPT => ['領収金額', '合計金額', '合計', '金額'],
     ];
 
-    private const TOTAL_EXCLUDE = ['小計', '点数', '預', '釣', '対象', '税抜', '消費税', '内税', '外税', '源泉'];
+    // 前回 / 繰越 / 入金 / 残高: a statement's previous balance and payments, a card's remaining balance.
+    private const TOTAL_EXCLUDE = ['小計', '点数', '預', '釣', '対象', '税抜', '消費税', '内税', '外税', '源泉', '前回', '繰越', '入金', '残高'];
 
     /** @var list<Row> */
     private array $rows = [];
@@ -88,7 +92,7 @@ class RuleExtractor implements Extractor
             'issue_date' => $this->date('issue_date', match ($type) {
                 DocumentClassifier::INVOICE => ['請求日', '請求年月日', '発行日', '日付'],
                 DocumentClassifier::PAID_RECEIPT => ['領収日', '発行日', '日付'],
-                default => [],
+                default => ['出庫', '精算日'],          // parking: paid at the exit, not the entry
             }),
             'invoice_number' => $receipt ? null : $this->code('invoice_number', ['請求書番号', '請求番号', '請求No', '伝票番号', 'No.', 'No']),
             'due_date' => $invoice ? $this->date('due_date', ['お支払期限', '支払期限', 'お支払期日', '支払期日', '振込期日', '振込期限', 'お振込期限'], fallback: false) : null,
@@ -449,6 +453,12 @@ class RuleExtractor implements Extractor
         $best = array_search(max(array_column($pool, 0)), array_column($pool, 0), true);
         [$amount, $row] = array_values($pool)[$best];
 
+        // A return or refund prints the total as "-¥700" or "¥-700".
+        $digits = preg_quote(number_format($amount), '/').'|'.$amount;
+        if (preg_match("/(?:-\\s?¥|¥\\s?-|-)\\s?(?:{$digits})(?!\\d)/u", $this->t[$row])) {
+            $amount = -$amount;
+        }
+
         return $this->take('total', $row, $amount);
     }
 
@@ -559,7 +569,8 @@ class RuleExtractor implements Extractor
      */
     private function taxes(): array
     {
-        $text = implode("\n", $this->t);
+        // "ご請求金額(税込)" / "合計(税込)" only says the total includes tax; it says nothing about the prices.
+        $text = preg_replace('/(請求金額|請求額|合計|総額|お支払金額)[(（]?税込[)）]?/u', '$1', implode("\n", $this->t));
         $stated = match (true) {
             (bool) preg_match('/外税|外消費税|税抜/u', $text) => 'exclusive',
             (bool) preg_match('/内税|内消費税|うち消費税|\(内\)|税込/u', $text) => 'inclusive',
@@ -571,14 +582,18 @@ class RuleExtractor implements Extractor
         $anyRate = '/(?<![\d.])(?:10|8)(?:\.0)?%/u';
 
         foreach (self::RATES as $rate) {
+            $thisRate = '/(?<![\d.])'.$rate.'(?:\.0)?%/u';
             foreach ($this->t as $i => $line) {
-                if (! preg_match('/(?<![\d.])'.$rate.'(?:\.0)?%/u', $line, $m, PREG_OFFSET_CAPTURE)) {
+                // A rate on a service charge, fee or discount row is not a tax rate.
+                if (! preg_match($thisRate, $line, $m, PREG_OFFSET_CAPTURE) || preg_match(self::NOT_TAX_RATE, $line)) {
                     continue;
                 }
 
-                $amounts = $this->amounts(substr($line, $m[0][1] + strlen($m[0][0])));
+                $amounts = [...$this->amounts(substr($line, $m[0][1] + strlen($m[0][0]))), ...$this->amounts(substr($line, 0, $m[0][1]))];
                 for ($j = $i - 3; $j <= $i + 3; $j++) {
-                    if ($j !== $i && isset($this->t[$j]) && ! preg_match($anyRate, $this->t[$j])) {
+                    // Neighbouring rows: those without a rate, or with the same rate ("外税8%対象額 ¥1,124" / "外税8% ¥89").
+                    if ($j !== $i && isset($this->t[$j]) && (! preg_match($anyRate, $this->t[$j]) || preg_match($thisRate, $this->t[$j]))
+                        && ! preg_match(self::NOT_TAX_RATE, $this->t[$j])) {
                         array_push($amounts, ...$this->amounts($this->t[$j]));
                     }
                 }
@@ -721,7 +736,7 @@ class RuleExtractor implements Extractor
                 continue;
             }
 
-            if ($items !== [] && preg_match('/^(\d+)\s?(?:点|個|コ)?\s?[x×@]\s?¥?(\d[\d,]*)$/u', trim($row), $m)) {
+            if ($items !== [] && preg_match('/^(\d+)\s?(?:点|個|コ)?\s?(?:[x×]\s?@?|@)\s?¥?(\d[\d,]*)$/u', trim($row), $m)) {
                 $items[count($items) - 1]['quantity'] = (float) $m[1];
                 $items[count($items) - 1]['unit_price'] = self::number($m[2]);
 
@@ -782,8 +797,10 @@ class RuleExtractor implements Extractor
         $row = preg_replace('/^\d{1,3}\s+(?=\D)/u', '', trim($row));
 
         $quantity = 1.0;
-        if (preg_match('/(?<![\d,])(\d+(?:\.\d+)?)\s?(式|個|点|コ|本|枚|件|台|人|回|時間)/u', $row, $m)) {
+        $counted = false;
+        if (preg_match('/(?<![\d,])(\d+(?:\.\d+)?)\s?(式|個|点|コ|本|枚|件|台|人|回|時間|L|ℓ|リットル)(?![A-Za-z])/u', $row, $m)) {
             $quantity = (float) $m[1];
+            $counted = true;
             $row = str_replace($m[0], ' ', $row);
         }
 
@@ -794,12 +811,14 @@ class RuleExtractor implements Extractor
             return null;
         }
         $amounts = array_map(fn ($x) => self::number(($x[2][0] ?? '') !== '' ? $x[2][0] : $x[3][0]), $matches);
-        $name = trim(substr($row, 0, $matches[0][0][1]));
+        $name = trim(preg_replace('/(?:\s*[x×]\s*@?|\s*@|\s*-\s*¥?|\s*¥)+$/u', '', substr($row, 0, $matches[0][0][1])));
+        // A returned item prints its amount as "-¥550".
+        $negative = (bool) preg_match('/-\s?¥?\s?$/u', substr($row, 0, $matches[array_key_last($matches)][0][1]));
 
         // Table columns: quantity, unit price, amount ("医品名 100 1,200 120,000").
         $unit = count($amounts) > 1 ? $amounts[0] : null;
         // Two columns, a plain count and a ¥ price ("ランニングシューズ 1 ¥7,700"): quantity and amount.
-        if (count($amounts) === 2 && $matches[0][1][0] !== '¥' && $matches[1][1][0] === '¥' && $amounts[0] > 0 && $amounts[0] < 1000) {
+        if (! $counted && count($amounts) === 2 && $matches[0][1][0] !== '¥' && $matches[1][1][0] === '¥' && $amounts[0] > 0 && $amounts[0] < 1000) {
             [$quantity, $unit] = [(float) $amounts[0], $amounts[1] % $amounts[0] === 0 ? intdiv($amounts[1], $amounts[0]) : null];
         }
         if (count($amounts) >= 3 && end($amounts) === $amounts[0] * $amounts[1]) {
@@ -815,7 +834,7 @@ class RuleExtractor implements Extractor
             'name' => preg_replace('/\s+/u', ' ', $name),
             'quantity' => $quantity,
             'unit_price' => $unit,
-            'amount' => end($amounts),
+            'amount' => $negative ? -end($amounts) : end($amounts),
             'tax_rate' => $rate ?? (($marked xor $markIsStandard) ? 8 : 10),
             'discount' => 0,
         ];

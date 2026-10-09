@@ -1,5 +1,7 @@
 <?php
 
+use App\Extraction\Data\ExtractedDocument;
+use App\Extraction\RuleExtractor;
 use App\Models\ImportProfile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -403,4 +405,12 @@ function sagyouTemplate(): ImportProfile
         ],
         'match' => ['anchors' => ['月度勤務表兼作業報告書'], 'headers' => ['就業日', '区分', '始業時間', '終業時間', '稼働時間', '備考']],
     ]);
+}
+
+/** OCR text as engine lines without boxes (like the PDF text layer), through the rule extractor. */
+function extractText(string $text, string $type): ExtractedDocument
+{
+    $lines = array_map(fn (string $line) => ['text' => $line, 'confidence' => 0.9, 'bbox' => null], preg_split('/\R/u', $text));
+
+    return (new RuleExtractor)->extractLines($lines, $type);
 }

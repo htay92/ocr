@@ -26,7 +26,7 @@ class LinesMatchTaxableAmounts extends Rule
         foreach ($doc->taxes as $row) {
             $sum = 0;
             foreach ($doc->lines as $line) {
-                if ($line['tax_rate'] === $row['tax_rate']) {
+                if ($line['tax_rate'] === $row['tax_rate'] && ! preg_match(self::NON_TAXABLE, $line['name'])) {
                     $sum += $line['amount'] + $line['discount'];
                 }
             }

@@ -1,19 +1,10 @@
 <?php
 
-use App\Extraction\Data\ExtractedDocument;
 use App\Extraction\RuleExtractor;
 use App\Processing\DocumentClassifier;
 use App\Validation\ReceiptValidator;
 use App\Validation\RuleResult;
 use App\Validation\ValidationContext;
-
-/** OCR text as engine lines without boxes (like the PDF text layer). */
-function extractText(string $text, string $type): ExtractedDocument
-{
-    $lines = array_map(fn (string $line) => ['text' => $line, 'confidence' => 0.9, 'bbox' => null], preg_split('/\R/u', $text));
-
-    return (new RuleExtractor)->extractLines($lines, $type);
-}
 
 // --- レシート (receipt) ------------------------------------------------------
 

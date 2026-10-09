@@ -24,6 +24,15 @@ abstract class Rule implements ValidationRule
         return new RuleResult($this->code(), RuleResult::SKIPPED, $message);
     }
 
+    /** Charges outside consumption tax: lodging and bath taxes, stamps, advances (立替). */
+    public const NON_TAXABLE = '/宿泊税|入湯税|印紙|非課税|不課税|立替/u';
+
+    /** Sum of line items that carry no consumption tax. */
+    protected static function nonTaxable(array $lines): int
+    {
+        return array_sum(array_map(fn (array $line) => preg_match(self::NON_TAXABLE, $line['name']) ? $line['amount'] + $line['discount'] : 0, $lines));
+    }
+
     protected static function yen(int|float|null $amount): string
     {
         return $amount === null ? '—' : '¥'.number_format($amount);
