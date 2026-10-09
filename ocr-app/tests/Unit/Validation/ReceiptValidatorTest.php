@@ -143,3 +143,16 @@ it('V-11: the image is large enough to read (warning)', function (?array $size, 
     'A4 at 150 dpi' => [[1240, 1754], 'pass'],
     'no image (PDF text, spreadsheet)' => [null, 'skipped'],
 ]);
+
+it('V-04: tax-included line prices may add up to the total of a tax-exclusive document', function () {
+    $fields = ['subtotal' => 7000, 'total' => 7700, 'tax_mode' => 'exclusive'];
+
+    expect(level('V-04', $fields, [tax(10, 7000, 700)], [line(7700)], 'invoice'))->toBe('pass')
+        ->and(level('V-04', $fields, [tax(10, 7000, 700)], [line(7000)], 'invoice'))->toBe('pass')
+        ->and(level('V-04', $fields, [tax(10, 7000, 700)], [line(7500)], 'invoice'))->toBe('critical');
+});
+
+it('V-08: tax-included line prices match taxable amount plus tax on a tax-exclusive document', function () {
+    expect(level('V-08', ['tax_mode' => 'exclusive'], [tax(10, 7000, 700)], [line(7700)], 'invoice'))->toBe('pass')
+        ->and(level('V-08', ['tax_mode' => 'inclusive'], [tax(10, 7000, 700)], [line(7700)], 'invoice'))->toBe('warning');
+});

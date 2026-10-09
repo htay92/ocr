@@ -43,7 +43,7 @@ class RuleExtractor implements Extractor
     private const RATES = [10, 8];
 
     /** Row words that are never a line item. */
-    private const NOT_ITEM = '/#\d|残高|ポイント|会員|利用可能|^No\.?\d|号:|^[^\d¥]{1,8}:\d|合計|小計|請求|金額|期限|期日|振込|口座|銀行|登録|TEL|電話|〒|番号|担当|件名|御中|様|消費税|対象|預|釣|点数|レジ|丁目|番地|源泉|内訳|税抜|税込|現金|クレジット|カード|支払|お買上/u';
+    private const NOT_ITEM = '/#\d|残高|ポイント|会員|利用可能|^No\.?\d|号:|^[^\d¥]{1,8}:\d|合計|小計|請求|金額|期限|期日|振込|口座|銀行|登録|TEL|電話|〒|番号|担当|件名|御中|様|消費税|対象|預|釣|点数|レジ|丁目|番地|源泉|内訳|税抜|税込|現金|クレジット|カード|支払|お買上|^Page\d+of\d+/u';
 
     private const TOTAL_LABELS = [
         DocumentClassifier::RECEIPT => ['合計', '総合計', 'お買上計', 'お買上合計', 'お買上げ合計', '税込合計'],
@@ -102,6 +102,12 @@ class RuleExtractor implements Extractor
             'change' => $invoice ? null : $this->amount('change', ['お釣り', 'お釣', 'おつり', '釣銭', '釣り']),
             'purpose' => $type === DocumentClassifier::PAID_RECEIPT ? $this->purpose() : null,
         ];
+
+        // No total label (online-shop invoices print 税抜金額, 消費税 and the amount paid): the total is
+        // subtotal + tax, but only when that amount is printed somewhere, never a computed-only value.
+        if ($fields['total'] === null && $fields['subtotal'] !== null && $taxes['mode'] === 'exclusive' && $taxes['rows'] !== []) {
+            $fields['total'] = $this->printedAmount('total', $fields['subtotal'] + array_sum(array_column($taxes['rows'], 'tax_amount')));
+        }
 
         return new ExtractedDocument(
             fields: $fields,
@@ -326,7 +332,8 @@ class RuleExtractor implements Extractor
         }
 
         foreach ($this->t as $i => $text) {
-            if (! preg_match('/期限|期日|支払|振込|納品|有効/u', $text) && $date = $this->parseDate($text)) {
+            // Skip due, delivery and validity dates; 支払先 / 支払方法 (payer, payment method) are fine.
+            if (! preg_match('/期限|期日|支払(?!先|方法)|振込|納品|有効/u', $text) && $date = $this->parseDate($text)) {
                 return $this->take($field, $i, $date);
             }
         }
@@ -443,6 +450,18 @@ class RuleExtractor implements Extractor
         [$amount, $row] = array_values($pool)[$best];
 
         return $this->take('total', $row, $amount);
+    }
+
+    /** $amount if a row prints it (the last such row, nearest to the totals), else null. */
+    private function printedAmount(string $field, int $amount): ?int
+    {
+        foreach (array_reverse($this->t, true) as $i => $text) {
+            if (in_array($amount, $this->amounts($text), true)) {
+                return $this->take($field, $i, $amount);
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -668,6 +687,21 @@ class RuleExtractor implements Extractor
             }
         }
 
+        // Invoice tables have a header row (品名 … 数量 / 金額); items start below it. When the table prints
+        // its prices with ¥, a row without a ¥ amount is not an item but the first part of a wrapped
+        // name ("ナイキ レボリューション 8 ウィメン" + "ズ ロード ランニングシューズ 1 ¥7,700").
+        $header = null;
+        if ($type !== DocumentClassifier::RECEIPT) {
+            foreach ($this->t as $i => $row) {
+                if (preg_match('/品名|品目|商品名|内容|摘要/u', $row) && preg_match('/数量|個数|単価|金額|価格/u', $row)) {
+                    $header = $i;
+                    $start = $i + 1;
+                    break;
+                }
+            }
+        }
+        $yenTable = $header !== null && collect(array_slice($this->t, $start, 30))->contains(fn ($row) => preg_match('/¥\d/u', $row));
+
         $items = [];
         $pendingName = null;
         for ($i = $start; $i < count($this->rows); $i++) {
@@ -702,7 +736,7 @@ class RuleExtractor implements Extractor
                 continue;
             }
 
-            $item = $this->item($row, $markIsStandard);
+            $item = $yenTable && ! preg_match('/¥\d/u', $compact) ? null : $this->item($row, $markIsStandard);
             if ($item === null) {
                 // A name without an amount; the next row may carry the amount behind a tax mark ("外 47").
                 $pendingName = preg_match('/\p{L}{2}/u', $compact) ? trim($row) : null;
@@ -712,12 +746,22 @@ class RuleExtractor implements Extractor
 
             if (mb_strlen($item['name']) <= 1 && $pendingName !== null) {
                 $item['name'] = $pendingName;
+            } elseif ($yenTable && $pendingName !== null) {
+                $item['name'] = self::joinWrapped(preg_replace('/\s+/u', ' ', $pendingName), $item['name']);
             }
             $pendingName = null;
             $items[] = ['line_no' => count($items) + 1, ...$item];
         }
 
         return $items;
+    }
+
+    /** A name wrapped onto the next row: Japanese text continues without a space ("ウィメン" + "ズ"). */
+    private static function joinWrapped(string $first, string $rest): string
+    {
+        $cjk = '[\p{Han}\p{Hiragana}\p{Katakana}ー]';
+
+        return preg_match("/{$cjk}$/u", $first) && preg_match("/^{$cjk}/u", $rest) ? $first.$rest : "{$first} {$rest}";
     }
 
     /**
@@ -754,6 +798,10 @@ class RuleExtractor implements Extractor
 
         // Table columns: quantity, unit price, amount ("医品名 100 1,200 120,000").
         $unit = count($amounts) > 1 ? $amounts[0] : null;
+        // Two columns, a plain count and a ¥ price ("ランニングシューズ 1 ¥7,700"): quantity and amount.
+        if (count($amounts) === 2 && $matches[0][1][0] !== '¥' && $matches[1][1][0] === '¥' && $amounts[0] > 0 && $amounts[0] < 1000) {
+            [$quantity, $unit] = [(float) $amounts[0], $amounts[1] % $amounts[0] === 0 ? intdiv($amounts[1], $amounts[0]) : null];
+        }
         if (count($amounts) >= 3 && end($amounts) === $amounts[0] * $amounts[1]) {
             [$quantity, $unit] = [(float) $amounts[0], $amounts[1]];
         }

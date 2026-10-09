@@ -8,7 +8,8 @@ use App\Validation\ValidationContext;
 /**
  * V-04: sum of line amounts plus discounts equals the subtotal, or the total when
  * there is no subtotal (critical when lines exist). Tax-exclusive documents
- * without a subtotal are compared with the total before tax.
+ * without a subtotal are compared with the total before tax; with a subtotal,
+ * lines may also add up to the total (prices printed tax-included, 税込価格).
  */
 class LinesMatchSubtotal extends Rule
 {
@@ -28,6 +29,10 @@ class LinesMatchSubtotal extends Rule
         $targets = [];
         if ($doc->get('subtotal') !== null) {
             $targets['subtotal'] = $doc->get('subtotal');
+            // Tables with tax-included prices (税込価格) add up to the total, not the subtotal before tax.
+            if ($total !== null && $doc->get('tax_mode') === 'exclusive') {
+                $targets['total'] = $total;
+            }
         } elseif ($total !== null) {
             if ($doc->get('tax_mode') !== 'exclusive') {
                 $targets['total'] = $total;

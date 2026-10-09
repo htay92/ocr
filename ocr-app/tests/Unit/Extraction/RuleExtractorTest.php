@@ -2,6 +2,10 @@
 
 use App\Extraction\Data\ExtractedDocument;
 use App\Extraction\RuleExtractor;
+use App\Processing\DocumentClassifier;
+use App\Validation\ReceiptValidator;
+use App\Validation\RuleResult;
+use App\Validation\ValidationContext;
 
 /** OCR text as engine lines without boxes (like the PDF text layer). */
 function extractText(string $text, string $type): ExtractedDocument
@@ -382,4 +386,62 @@ it('does not take a lone yen amount from the lower half or on a receipt', functi
     $lowerHalf = "請求書\n株式会社A御中\n品名\n数量\n単価\n金額\nA\n1\n¥5,000\n振込先 B銀行";
     expect(extractText($lowerHalf, 'invoice')->get('total'))->toBeNull()
         ->and(extractText("ローソン\n2026年10月1日\n¥1,280\nおにぎり", 'receipt')->get('total'))->toBeNull();
+});
+
+// --- online-shop invoice from a PDF text layer (no 合計 label) ------------------
+
+/** pdftotext -layout of an online-shop 請求書兼領収書 (Nike.com); customer name, addresses and numbers masked. */
+const ONLINE_INVOICE = <<<'TXT'
+Nike.com
+請求番号           JP0000000001                        発送先        100-0001 JP-13 千代田区 千代田
+ご注文番号          C00000000001                                   １-１-１
+発送日            2026/04/23                          支払先        Taro Yamada
+100-0001 JP-13 Chiyoda Chiyoda
+1-1-1
+Sample Heights 1 101
+請求書兼領収書
+スタイル番号         品名                     販売個数           税込価格
+HJ8485         ナイキ レボリューション 8 ウィメン
+ズ ロード ランニングシューズ             1         ￥7,700
+配送料                         1             ￥0
+税抜金額:                                                     ￥7,000
+消費税 10%:                                                   ￥700
+支払方法:                      クレジットカード                       ￥7,700
+ナイキジャパン 東京都港区赤坂9-7-1 ミッドタウンタワー
+適格請求書発行事業者登録番号: T9010701007169
+ご注意ください - こちらは返品先住所ではありません - 返品については、www.nike.com のヘルプ セクション「返品」をご覧ください。
+Page 1 of 1
+TXT;
+
+it('classifies an online-shop 請求書兼領収書 as an invoice, although クレジット contains レジ', function () {
+    expect(app(DocumentClassifier::class)->classify(ONLINE_INVOICE))->toBe('invoice');
+});
+
+it('reads an online-shop invoice without a 合計 label', function () {
+    $doc = extractText(ONLINE_INVOICE, 'invoice');
+
+    expect($doc->fields)->toMatchArray([
+        'invoice_number' => 'JP0000000001',
+        'issue_date' => '2026-04-23',                  // the only date; 支払先 (payer) is not a payment due date
+        'registration_number' => 'T9010701007169',
+        'subtotal' => 7000,
+        'total' => 7700,                                // 税抜金額 + 消費税, and printed as the amount paid
+    ])
+        ->and($doc->taxes)->toBe([['tax_rate' => 10, 'taxable_amount' => 7000, 'tax_amount' => 700]])
+        ->and($doc->lines)->toHaveCount(1)
+        ->and($doc->lines[0])->toMatchArray([
+            'name' => 'HJ8485 ナイキ レボリューション 8 ウィメンズ ロード ランニングシューズ',
+            'quantity' => 1.0,
+            'amount' => 7700,
+        ]);
+
+    $results = (new ReceiptValidator)->validate(new ValidationContext($doc, 'invoice', 1.0));
+    expect(RuleResult::criticalCount($results))->toBe(0);
+});
+
+it('does not invent a total that is not printed', function () {
+    // 税抜金額 + 消費税 = 7,700, but no amount 7,700 appears anywhere.
+    $doc = extractText("請求書\n品名 数量 金額\nA 1 ¥3,000\nB 1 ¥4,000\n税抜金額 ¥7,000\n消費税 10% ¥700", 'invoice');
+
+    expect($doc->get('total'))->toBeNull();
 });

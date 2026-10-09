@@ -30,8 +30,9 @@ class DocumentClassifier
             return self::ATTENDANCE;
         }
 
-        // Till receipts often print 領収証 as a heading; these words only appear on till receipts.
-        $till = preg_match('/お?預り|お?預かり|お?釣り?|おつり|釣銭|レジ|点数|お買上/u', $t) === 1;
+        // Till receipts often print 領収証 as a heading; these words only appear on till receipts
+        // (レジ, but not the レジ in クレジット).
+        $till = preg_match('/お?預り|お?預かり|お?釣り?|おつり|釣銭|(?<!ク)レジ|点数|お買上/u', $t) === 1;
 
         if (! $till && preg_match('/請求書|請求金額|御請求|ご請求/u', $t)) {
             return self::INVOICE;
